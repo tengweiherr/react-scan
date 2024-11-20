@@ -90,6 +90,14 @@
         }
       }
     },
+    "./babel": {
+      "types": "./dist/babel.d.ts",
+      "default": "./dist/babel.js"
+    },
+    "./native": {
+      "types": "./native.js",
+      "default": "./dist/native.d.ts"
+    },
     "./dist/*": "./dist/*.js",
     "./dist/*.js": "./dist/*.js",
     "./dist/*.mjs": "./dist/*.mjs"
@@ -97,7 +105,21 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "browser": "dist/auto.global.js",
+  "react-native": "native.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "native": [
+        "./dist/native.d.ts"
+      ],
+      ".": [
+        "./dist/auto.d.ts"
+      ],
+      "babel": [
+        "./dist/babel.d.ts"
+      ]
+    }
+  },
   "bin": "bin/cli.js",
   "files": [
     "dist",
@@ -105,7 +127,8 @@
     "package.json",
     "README.md",
     "LICENSE",
-    "auto.d.ts"
+    "native.js",
+    "babel.js"
   ],
   "scripts": {
     "build": "NODE_ENV=production tsup",
@@ -117,22 +140,57 @@
   "dependencies": {
     "@clack/core": "^0.3.5",
     "@clack/prompts": "^0.8.2",
+    "@expo/metro-config": "^0.19.4",
+    "@expo/metro-runtime": "^4.0.0",
+    "@react-native/metro-babel-transformer": "^0.76.3",
+    "@react-native/metro-config": "^0.76.3",
     "kleur": "^4.1.5",
+    "metro-react-native-babel-transformer": "^0.77.0",
     "mri": "^1.2.0",
+    "nanoid": "^5.0.9",
     "playwright": "^1.49.0"
   },
   "devDependencies": {
+    "@babel/plugin-proposal-decorators": "^7.25.9",
+    "@babel/plugin-transform-flow-strip-types": "^7.25.9",
+    "@babel/plugin-transform-react-jsx": "^7.25.9",
+    "@babel/plugin-transform-typescript": "^7.25.9",
+    "@babel/preset-flow": "^7.25.9",
+    "@babel/preset-react": "^7.25.9",
+    "@babel/preset-typescript": "^7.26.0",
+    "@rnx-kit/metro-config": "^2.0.1",
+    "@rnx-kit/metro-serializer-esbuild": "^0.2.1",
+    "@shopify/react-native-skia": "*",
+    "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-reconciler": "^0.28.8",
     "@vercel/style-guide": "^6.0.0",
     "eslint": "^8.57.1",
+    "metro-babel-transformer": "^0.81.0",
+    "metro-react-native-babel-preset": "^0.77.0",
     "prettier": "^3.3.3",
     "publint": "^0.2.12",
     "react": "*",
     "react-dom": "*",
+    "react-native": "*",
+    "react-native-reanimated": "*",
     "react-reconciler": "^0.29.2",
     "terser": "^5.36.0",
     "tsup": "^8.2.4"
+  },
+  "peerDependenciesMeta": {
+    "@shopify/react-native-skia": {
+      "optional": true
+    },
+    "metro-react-native-babel-preset": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-reanimated": {
+      "optional": true
+    }
   },
   "publishConfig": {
     "access": "public"
