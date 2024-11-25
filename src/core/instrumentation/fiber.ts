@@ -5,10 +5,10 @@ import type * as React from 'react';
 import type { Fiber } from 'react-reconciler';
 
 const PerformedWorkFlag = 0b01;
-const ClassComponentTag = 1;
-const FunctionComponentTag = 0;
+export const ClassComponentTag = 1;
+export const FunctionComponentTag = 0;
 const ContextConsumerTag = 9;
-const ForwardRefTag = 11;
+export const ForwardRefTag = 11;
 const MemoComponentTag = 14;
 const SimpleMemoComponentTag = 15;
 const HostComponentTag = 5;

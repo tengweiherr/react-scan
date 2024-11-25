@@ -51,7 +51,7 @@ export const fastSerialize = (value: unknown) => {
   }
 };
 
-export const getType = (type: any) => {
+export const getType = (type: any): any => {
   if (typeof type === 'function') {
     return type;
   }

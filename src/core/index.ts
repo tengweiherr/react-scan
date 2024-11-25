@@ -1,5 +1,5 @@
 import type { Fiber, FiberRoot } from 'react-reconciler';
-import type * as React from 'react';
+import * as React from 'react';
 import { instrument, type Render } from './instrumentation/index';
 import {
   type ActiveOutline,
@@ -10,7 +10,12 @@ import {
 import { logIntro } from './web/log';
 import { playGeigerClickSound } from './web/geiger';
 import { createPerfObserver } from './web/perf-observer';
-import { ReactScanOverlay } from './web/custom-element';
+import { initReactScanOverlay } from './web/overlay';
+import {
+  createInspectElementStateMachine,
+  type States,
+} from './web/inspect-element/inspect-state-machine';
+import { createToolbar } from './web/toolbar';
 
 export interface Options {
   /**
@@ -93,7 +98,7 @@ export interface Options {
   onPaintFinish?: (outlines: PendingOutline[]) => void;
 }
 
-interface Internals {
+export interface Internals {
   onCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
   isInIframe: boolean;
   isPaused: boolean;
@@ -101,6 +106,15 @@ interface Internals {
   options: Options;
   scheduledOutlines: PendingOutline[];
   activeOutlines: ActiveOutline[];
+  reportDataByFiber: WeakMap<
+    Fiber,
+    {
+      count: number;
+      time: number;
+      badRenders: Render[];
+      displayName: string | null;
+    }
+  >;
   reportData: Record<
     string,
     {
@@ -109,14 +123,124 @@ interface Internals {
       badRenders: Render[];
     }
   >;
+  fiberRoots: WeakSet<Fiber>;
+  inspectState: States;
 }
 
-export const ReactScanInternals: Internals = {
+type Listener<T> = (value: T) => void;
+
+export interface StoreMethods<T extends object> {
+  subscribe: <K extends keyof T>(
+    key: K,
+    listener: Listener<T[K]>,
+  ) => () => void;
+  set: <K extends keyof T>(key: K, value: T[K]) => void;
+  setState: (state: Partial<T>) => void;
+  emit: <K extends keyof T>(key: K, value: T[K]) => void;
+  subscribeMultiple: (
+    subscribeTo: (keyof T)[],
+    listener: Listener<T>,
+  ) => () => void;
+}
+
+type Store<T extends object> = T & StoreMethods<T>;
+
+const createStore = <T extends object>(initialData: T): Store<T> => {
+  const data: T = { ...initialData };
+  const listeners: { [K in keyof T]?: Listener<T[K]>[] } = {};
+
+  const emit = <K extends keyof T>(key: K, value: T[K]): void => {
+    listeners[key]?.forEach((listener) => listener(value));
+  };
+
+  const set = <K extends keyof T>(key: K, value: T[K]): void => {
+    if (data[key] !== value) {
+      data[key] = value;
+      emit(key, value);
+    }
+  };
+
+  const subscribe = <K extends keyof T>(
+    key: K,
+    listener: Listener<T[K]>,
+  ): (() => void) => {
+    if (!listeners[key]) {
+      listeners[key] = [];
+    }
+    listeners[key]!.push(listener);
+    listener(data[key]);
+    return () => {
+      listeners[key] = listeners[key]!.filter((l) => l !== listener);
+    };
+  };
+
+  const setState = (state: Partial<T>) => {
+    for (const key in state) {
+      if (Object.prototype.hasOwnProperty.call(state, key)) {
+        set(key as keyof T, state[key] as T[keyof T]);
+      }
+    }
+  };
+
+  const subscribeMultiple = (
+    subscribeTo: (keyof T)[],
+    listener: (store: typeof data) => void,
+  ) => {
+    subscribeTo.forEach((key) => {
+      if (!listeners[key]) {
+        listeners[key] = [];
+      }
+      listeners[key]?.push(() => listener(data));
+    });
+
+    return () => {
+      subscribeTo.forEach((key) => {
+        listeners[key] = listeners[key]?.filter((cb) => cb !== listener);
+      });
+    };
+  };
+
+  const proxy = new Proxy(data, {
+    get(target, prop, receiver) {
+      if (prop === 'subscribe') return subscribe;
+      if (prop === 'setState') return setState;
+      if (prop === 'emit') return emit;
+      if (prop === 'set') return set;
+      if (prop === 'subscribeMultiple') return subscribeMultiple;
+
+      return Reflect.get(target, prop, receiver);
+    },
+    set(target, prop, value) {
+      if (prop in target) {
+        set(prop as keyof T, value as T[keyof T]);
+        return true;
+      }
+      throw new Error(`Property "${String(prop)}" does not exist`);
+    },
+    deleteProperty(_, prop) {
+      throw new Error(`Cannot delete property "${String(prop)}" from store`);
+    },
+  });
+
+  return proxy as Store<T>;
+};
+
+const tryParse = (x: any) => {
+  try {
+    return JSON.parse(x);
+  } catch {
+    return 'false';
+  }
+};
+export const ReactScanInternals = createStore<Internals>({
   onCommitFiberRoot: (_rendererID: number, _root: FiberRoot): void => {
     /**/
   },
-  isInIframe: window.self !== window.top,
-  isPaused: false,
+  isInIframe: typeof window !== 'undefined' && window.self !== window.top,
+  isPaused:
+    typeof window === 'undefined'
+      ? true
+      : tryParse(localStorage.getItem('react-scan-paused') ?? 'false'),
   componentAllowList: null,
   options: {
     enabled: true,
@@ -129,9 +253,14 @@ export const ReactScanInternals: Internals = {
     alwaysShowLabels: false,
   },
   reportData: {},
+  reportDataByFiber: new WeakMap(),
   scheduledOutlines: [],
   activeOutlines: [],
-};
+  fiberRoots: new WeakSet(),
+  inspectState: {
+    kind: 'uninitialized',
+  },
+});
 
 export const getReport = () => ReactScanInternals.reportData;
 
@@ -145,21 +274,22 @@ export const setOptions = (options: Options) => {
 export const getOptions = () => ReactScanInternals.options;
 
 export const start = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
   const { options } = ReactScanInternals;
 
   if (document.querySelector('react-scan-overlay')) return;
+  initReactScanOverlay();
 
-  const overlayElement = document.createElement(
-    'react-scan-overlay',
-  ) as ReactScanOverlay;
+  const overlayElement = document.createElement('react-scan-overlay') as any;
   document.body.appendChild(overlayElement);
 
-  const toolbar = overlayElement.getToolbar();
-  const ctx = overlayElement.getContext();
-
-  if (options.showToolbar === false) {
-    overlayElement.hideToolbar();
+  if (options.showToolbar) {
+    createToolbar();
   }
+  const ctx = overlayElement.getContext();
+  createInspectElementStateMachine();
 
   const audioContext =
     typeof window !== 'undefined'
@@ -180,6 +310,10 @@ export const start = () => {
       options.onCommitStart?.();
     },
     onRender(fiber, render) {
+      if (ReactScanInternals.isPaused) {
+        // don't draw if it's paused
+        return;
+      }
       options.onRender?.(fiber, render);
       const outline = getOutline(fiber, render);
       if (!outline) return;
@@ -193,7 +327,7 @@ export const start = () => {
         );
         playGeigerClickSound(audioContext, amplitude);
       }
-      flushOutlines(ctx, new Map(), toolbar);
+      flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
       options.onCommitFinish?.();
@@ -231,4 +365,8 @@ export const scan = (options: Options = {}) => {
   start();
 };
 
-customElements.define('react-scan-overlay', ReactScanOverlay);
+export const useScan = (options: Options) => {
+  React.useEffect(() => {
+    scan(options);
+  }, []);
+};

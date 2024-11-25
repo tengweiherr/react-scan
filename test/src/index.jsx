@@ -1,4 +1,4 @@
-import { scan, getReport } from 'react-scan/dist/index.mjs'; // force production build
+import { scan } from 'react-scan/dist/index.mjs'; // force production build
 import React, { useState, createContext } from 'react';
 import ReactDOMClient from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
@@ -84,7 +84,7 @@ export const App = () => {
           </nav>
 
           <p>
-            React Scan "scans" your React app for problematic renders. It's just
+            React Scan "scans" your React app for slow renders. It's just
             JavaScript, so you drop it in anywhere – script tag, npm, you name
             it!
           </p>

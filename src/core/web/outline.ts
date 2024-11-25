@@ -153,7 +153,6 @@ export const recalcOutlines = throttle(() => {
 export const flushOutlines = (
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   previousOutlines: Map<string, PendingOutline> = new Map(),
-  toolbar: HTMLElement | null = null,
 ) => {
   if (!ReactScanInternals.scheduledOutlines.length) {
     return;
@@ -165,21 +164,6 @@ export const flushOutlines = (
   recalcOutlines();
 
   const newPreviousOutlines = new Map<string, PendingOutline>();
-
-  if (toolbar) {
-    let totalCount = 0;
-    let totalTime = 0;
-
-    for (const componentName in ReactScanInternals.reportData) {
-      const componentData = ReactScanInternals.reportData[componentName];
-      totalCount += componentData.count;
-      totalTime += componentData.time;
-    }
-
-    let text = `×${totalCount}`;
-    if (totalTime > 0) text += ` (${totalTime.toFixed(2)}ms)`;
-    toolbar.textContent = totalCount ? `${text} · react-scan` : 'react-scan';
-  }
 
   void paintOutlines(
     ctx,
@@ -195,7 +179,7 @@ export const flushOutlines = (
 
   if (ReactScanInternals.scheduledOutlines.length) {
     requestAnimationFrame(() => {
-      flushOutlines(ctx, newPreviousOutlines, toolbar);
+      flushOutlines(ctx, newPreviousOutlines);
     });
   }
 };
@@ -366,7 +350,6 @@ export const fadeOutOutline = (
     animationFrameId = null;
   }
 };
-
 async function paintOutlines(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   outlines: PendingOutline[],
@@ -394,7 +377,6 @@ async function paintOutlines(
     });
 
     ReactScanInternals.activeOutlines.push(...newActiveOutlines);
-
     if (!animationFrameId) {
       animationFrameId = requestAnimationFrame(() => fadeOutOutline(ctx));
     }

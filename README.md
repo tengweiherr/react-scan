@@ -1,34 +1,53 @@
 # <img src="https://github.com/aidenybai/react-scan/blob/main/.github/assets/logo.svg" width="30" height="30" align="center" /> React Scan
 
-React Scan detects performance issues in your React app.
+React Scan automatically detects performance issues in your React app.
 
-Previously, tools like [`<Profiler />`](https://react.dev/reference/react-devtools), [Why Did You Render?](https://github.com/welldone-software/why-did-you-render), and [React Devtools](https://legacy.reactjs.org/blog/2018/09/10/introducing-the-react-profiler.html) required lots of manual code change, lacked simple visual cues, or didn't have a simple, programmatic API.
+Previously, tools like:
 
-Instead, React Scan automatically detects and highlights renders that cause performance issues. This shows you exactly which components you need to fix.
+- [`<Profiler />`](https://react.dev/reference/react/Profiler) required lots of manual changes
+- [Why Did You Render?](https://github.com/welldone-software/why-did-you-render) lacked simple visual cues
+- [React Devtools](https://legacy.reactjs.org/blog/2018/09/10/introducing-the-react-profiler.html) didn't have a simple, portable, and programmatic API
 
-It's also just JavaScript, so you drop it in anywhere – script tag, npm, you name it!
+React Scan attempts to solve these problems:
+
+- It requires no code changes – just drop it in
+- It highlights exactly the components you need to optimize
+- Use it via script tag, npm, CLI, you name it!
+
+Trusted by engineering teams at:
+
+<a href="https://airbnb.com"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/airbnb-logo.png" height="30" align="center" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://polaris.shopify.com/"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/shopify-logo.png" height="30" align="center" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.faire.com/"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/faire-logo.svg" height="20" align="center" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://perplexity.com/"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/perplexity-logo.png" height="30" align="center" /></a>
 
 ### [**Try it out! →**](https://react-scan.million.dev)
 
 ![React Scan in action](https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/demo.gif?token=GHSAT0AAAAAAB4IOFACRC6P6E45TB2FPYFCZZV2AYA)
 
----
-
-Engineering teams use React Scan to optimize their React apps:
-
-<a href="https://airbnb.com"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/airbnb-logo.png" height="30" align="center" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://polaris.shopify.com/"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/shopify-logo.png" height="30" align="center" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.faire.com/"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/faire-logo.svg" height="20" align="center" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://perplexity.com/"><img src="https://raw.githubusercontent.com/aidenybai/react-scan/refs/heads/main/.github/assets/perplexity-logo.png" height="30" align="center" /></a>
-
+> [!IMPORTANT]
 > Looking for a more advanced version? Check out [Million Lint](https://million.dev)!
 
 ## Install
 
-The fastest way to get started is via CLI:
+The fastest way to get started is via CLI. This will spin up an isolated browser instance which you can interact or use React Scan with.
 
 ```bash
-npx react-scan@latest https://react.dev
+npx react-scan@latest http://localhost:3000
+# you can technically scan ANY website on the web:
+# npx react-scan@latest https://react.dev
 ```
 
-If you want to test your app locally, add this script to your app:
+You can add it to your existing dev process as well. Here's an example for Next.js:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "scan": "next dev & npx react-scan@latest localhost:3000"
+  }
+}
+```
+
+If you don't want to use a separate browser and you have access to your local codebase, then add this script to your app:
+
 ```html
 <!-- import this BEFORE any scripts -->
 <script src="https://unpkg.com/react-scan/dist/auto.global.js"></script>
@@ -115,241 +134,123 @@ Add the script tag to your `index.html`:
 
 </details>
 
----
+## API Reference
 
-**_Or_**, install it via npm:
+If you need a programmatic API to debug further, install via NPM instead:
 
 ```bash
 npm install react-scan
 ```
 
-Then, in your app, import this **BEFORE** `react`:
+Then, in your app, import this **BEFORE** `react`. This must run in a client context (e.g. not in a server component):
 
 ```js
 import { scan } from 'react-scan'; // import this BEFORE react
 import React from 'react';
 
-scan({
-  enabled: true,
-  log: true, // logs render info to console (default: false)
-});
+if (typeof window !== 'undefined') {
+  scan({
+    enabled: true,
+    log: true, // logs render info to console (default: false)
+  });
+}
 ```
 
 ## API Reference
 
 <details>
-<summary><code>scan(options)</code></summary>
+<summary><code>Options</code></summary>
 
 <br />
 
-Automatically scan your app for renders.
-
 ```jsx
-scan({
+{
   /**
    * Enable/disable scanning
+   *
+   * Please use the recommended way:
+   * enabled: process.env.NODE_ENV === 'development',
+   *
+   * @default true
    */
-  enabled: true,
-  // Recommended way:
-  // enabled: process.env.NODE_ENV === 'development',
-
+  enabled?: boolean;
   /**
    * Include children of a component applied with withScan
+   *
+   * @default true
    */
-  includeChildren: true,
+  includeChildren?: boolean;
 
   /**
    * Enable/disable geiger sound
+   *
+   * @default true
    */
-  playSound: true,
+  playSound?: boolean;
 
   /**
    * Log renders to the console
+   *
+   * @default false
    */
-  log: false,
+  log?: boolean;
 
   /**
    * Show toolbar bar
+   *
+   * @default true
    */
-  showToolbar: true,
+  showToolbar?: boolean;
 
   /**
    * Render count threshold, only show
    * when a component renders more than this
+   *
+   * @default 0
    */
-  renderCountThreshold: 0,
+  renderCountThreshold?: number;
+
+  /**
+   * Clear aggregated fibers after this time in milliseconds
+   *
+   * @default 5000
+   */
+  resetCountTimeout?: number;
+
+  /**
+   * Maximum number of renders for red indicator
+   *
+   * @default 20
+   */
+  maxRenders?: number;
 
   /**
    * Report data to getReport()
+   *
+   * @default false
    */
-  report: false,
-
-  onCommitStart: () => {},
-  onRender: (fiber, render) => {},
-  onCommitFinish: () => {},
-  onPaintStart: (outline) => {},
-  onPaintFinish: (outline) => {},
-});
-```
-
-</details>
-
-<details>
-<summary><code>withScan(Component, options)</code></summary>
-
-<br />
-
-Scan a specific component for renders.
-
-```jsx
-function Component(props) {
-  // ...
-}
-
-withScan(Component, {
-  /**
-   * Enable/disable scanning
-   */
-  enabled: true,
-  // Recommended way:
-  // enabled: process.env.NODE_ENV === 'development',
+  report?: boolean;
 
   /**
-   * Include children of a component applied with withScan
+   * Always show labels
+   *
+   * @default false
    */
-  includeChildren: true,
+  alwaysShowLabels?: boolean;
 
-  /**
-   * Enable/disable geiger sound
-   */
-  playSound: true,
-
-  /**
-   * Log renders to the console
-   */
-  log: false,
-
-  /**
-   * Show toolbar bar
-   */
-  showToolbar: true,
-
-  /**
-   * Render count threshold, only show
-   * when a component renders more than this
-   */
-  renderCountThreshold: 0,
-
-  /**
-   * Report data to getReport()
-   */
-  report: false,
-
-  onCommitStart: () => {},
-  onRender: (fiber, render) => {},
-  onCommitFinish: () => {},
-  onPaintStart: (outline) => {},
-  onPaintFinish: (outline) => {},
-});
-```
-
-</details>
-
-<details>
-<summary><code>getReport()</code></summary>
-
-<br />
-
-Get a aggregated report of all components and renders.
-
-```jsx
-scan({ report: true });
-
-const report = getReport();
-
-for (const component in report) {
-  const { count, time } = report[component];
-
-  console.log(`${component} rendered ${count} times, took ${time}ms`);
+  onCommitStart?: () => void;
+  onRender?: (fiber: Fiber, render: Render) => void;
+  onCommitFinish?: () => void;
+  onPaintStart?: (outlines: PendingOutline[]) => void;
+  onPaintFinish?: (outlines: PendingOutline[]) => void;
 }
 ```
 
 </details>
 
-<details>
-<summary><code>setOptions(options)</code></summary>
-
-```jsx
-function Component(props) {
-  // ...
-}
-
-setOptions({
-  /**
-   * Enable/disable scanning
-   */
-  enabled: true,
-  // Recommended way:
-  // enabled: process.env.NODE_ENV === 'development',
-
-  /**
-   * Include children of a component applied with withScan
-   */
-  includeChildren: true,
-
-  /**
-   * Enable/disable geiger sound
-   */
-  playSound: true,
-
-  /**
-   * Log renders to the console
-   */
-  log: false,
-
-  /**
-   * Show toolbar bar
-   */
-  showToolbar: true,
-
-  /**
-   * Render count threshold, only show
-   * when a component renders more than this
-   */
-  renderCountThreshold: 0,
-
-  /**
-   * Report data to getReport()
-   */
-  report: false,
-
-  onCommitStart: () => {},
-  onRender: (fiber, render) => {},
-  onCommitFinish: () => {},
-  onPaintStart: (outline) => {},
-  onPaintFinish: (outline) => {},
-});
-```
-
-</details>
-
-<details>
-<summary><code>getOptions()</code></summary>
-
-```jsx
-const {
-  enabled,
-  includeChildren,
-  runInProduction,
-  playSound,
-  log,
-  showToolbar,
-  longTaskThreshold,
-  resetCountTimeout,
-} = getOptions();
-```
-
-</details>
+- `scan(options)`: Imperative API to start scanning
+- `useScan(options)`: Hook API to start scanning
+- `withScan(Component, options)`: Useful if you only want to scan a specific component
 
 ## Why React Scan?
 

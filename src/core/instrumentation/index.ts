@@ -1,7 +1,6 @@
 import * as React from 'react';
 import type { Fiber, FiberRoot } from 'react-reconciler';
 import { ReactScanInternals } from '../index';
-import { type NO_OP } from '../utils';
 import {
   didFiberRender,
   getSelfTime,
@@ -13,24 +12,6 @@ import {
 } from './fiber';
 import { registerDevtoolsHook } from './placeholder';
 import { fastSerialize, getDisplayName, getType } from './utils';
-
-declare global {
-  interface Window {
-    __REACT_SCAN__?: {
-      ReactScanInternals: typeof ReactScanInternals;
-    };
-    reactScan: any;
-    __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
-      checkDCE: typeof NO_OP;
-      supportsFiber: boolean;
-      renderers: Map<number, any>;
-      onScheduleFiberRoot: typeof NO_OP;
-      onCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
-      onCommitFiberUnmount: typeof NO_OP;
-      inject: (renderer: any) => number;
-    };
-  }
-}
 
 export interface Change {
   name: string;
@@ -157,7 +138,7 @@ export const getContextRender = (
     forget: hasMemoCache(fiber),
   };
 };
-
+// back compat
 export const reportRender = (
   name: string,
   fiber: Fiber,
@@ -187,6 +168,43 @@ export const reportRender = (
     badRenders: baseReport.badRenders,
   };
 };
+export const reportRenderFiber = (fiber: Fiber, renders: (Render | null)[]) => {
+  const [reportFiber, report] = (() => {
+    const currentFiberData = ReactScanInternals.reportDataByFiber.get(fiber);
+    if (currentFiberData) {
+      return [fiber, currentFiberData] as const;
+    }
+    if (!fiber.alternate) {
+      return [fiber, null] as const; // use the current fiber as a key
+    }
+
+    const alternateFiberData = ReactScanInternals.reportDataByFiber.get(
+      fiber.alternate,
+    );
+    return [fiber.alternate, alternateFiberData] as const;
+  })();
+
+  if (report) {
+    for (let i = 0, len = renders.length; i < len; i++) {
+      const render = renders[i];
+      if (render) {
+        report.badRenders.push(render);
+      }
+    }
+  }
+  const time = getSelfTime(fiber);
+
+  ReactScanInternals.reportDataByFiber.set(reportFiber, {
+    count: (report?.count ?? 0) + 1,
+    time: (report?.time ?? 0) + (time !== 0 ? time : 0.1), // .1ms lowest precision
+    badRenders: report?.badRenders ?? [],
+    displayName: getDisplayName(fiber.type),
+  });
+  ReactScanInternals.emit(
+    'reportDataByFiber',
+    ReactScanInternals.reportDataByFiber,
+  );
+};
 
 export const instrument = ({
   onCommitStart,
@@ -199,13 +217,13 @@ export const instrument = ({
 }) => {
   const handleCommitFiberRoot = (_rendererID: number, root: FiberRoot) => {
     if (
-      ReactScanInternals.isPaused ||
+      (ReactScanInternals.isPaused &&
+        ReactScanInternals.inspectState.kind === 'inspect-off') ||
       ReactScanInternals.options.enabled === false
     ) {
       return;
     }
     onCommitStart();
-
     const recordRender = (fiber: Fiber) => {
       const type = getType(fiber.type);
       if (!type) return null;
@@ -223,9 +241,9 @@ export const instrument = ({
           trigger = true;
         }
       }
-
       const name = getDisplayName(type);
       if (name) {
+        reportRenderFiber(fiber, [propsRender, contextRender]); // back compat
         reportRender(name, fiber, [propsRender, contextRender]);
       }
 
@@ -343,6 +361,10 @@ export const instrument = ({
     rendererID: number,
     root: FiberRoot,
   ) => {
+    if (root) {
+      ReactScanInternals.fiberRoots.add(root);
+    }
+
     try {
       handleCommitFiberRoot(rendererID, root);
     } catch (err) {
