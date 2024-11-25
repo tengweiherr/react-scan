@@ -1,8 +1,7 @@
-import type { Fiber, FiberRoot } from 'react-reconciler';
 import * as React from 'react';
-import { type NO_OP } from '../utils';
+import type { Fiber, FiberRoot } from 'react-reconciler';
 import { ReactScanInternals } from '../index';
-import { getDisplayName, fastSerialize, getType } from './utils';
+import { type NO_OP } from '../utils';
 import {
   didFiberRender,
   getSelfTime,
@@ -13,6 +12,7 @@ import {
   traverseState,
 } from './fiber';
 import { registerDevtoolsHook } from './placeholder';
+import { fastSerialize, getDisplayName, getType } from './utils';
 
 declare global {
   interface Window {
@@ -50,18 +50,27 @@ export interface Render {
   label?: string;
 }
 
-const unstableTypes = ['function', 'object'];
+function isUnstableType(type: string) {
+  return type === 'function' || type === 'object';
+}
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export const getPropsRender = (fiber: Fiber, type: Function): Render | null => {
   const changes: Change[] = [];
 
-  const prevProps = fiber.alternate?.memoizedProps;
-  const nextProps = fiber.memoizedProps;
+  const prevProps = fiber.alternate?.memoizedProps || {};
+  const nextProps = fiber.memoizedProps || {};
 
-  for (const propName in { ...prevProps, ...nextProps }) {
-    const prevValue = prevProps?.[propName];
-    const nextValue = nextProps?.[propName];
+  // Get union props
+  // TODO needs faster solution
+  const props = new Set([
+    ...Object.keys(prevProps),
+    ...Object.keys(nextProps),
+  ]);
+
+  for (const propName of props) {
+    const prevValue = prevProps[propName];
+    const nextValue = nextProps[propName];
 
     if (
       Object.is(prevValue, nextValue) ||
@@ -83,8 +92,8 @@ export const getPropsRender = (fiber: Fiber, type: Function): Render | null => {
     const nextValueString = fastSerialize(nextValue);
 
     if (
-      !unstableTypes.includes(typeof prevValue) ||
-      !unstableTypes.includes(typeof nextValue) ||
+      !isUnstableType(typeof prevValue) ||
+      !isUnstableType(typeof nextValue) ||
       prevValueString !== nextValueString
     ) {
       continue;
@@ -111,6 +120,7 @@ export const getContextRender = (
 ): Render | null => {
   const changes: Change[] = [];
 
+  // TODO optimize callback
   const result = traverseContexts(fiber, (prevContext, nextContext) => {
     const prevValue = prevContext.memoizedValue;
     const nextValue = nextContext.memoizedValue;
@@ -127,8 +137,8 @@ export const getContextRender = (
     const nextValueString = fastSerialize(nextValue);
 
     if (
-      unstableTypes.includes(typeof prevValue) &&
-      unstableTypes.includes(typeof nextValue) &&
+      isUnstableType(typeof prevValue) &&
+      isUnstableType(typeof nextValue) &&
       prevValueString === nextValueString
     ) {
       change.unstable = true;
@@ -165,10 +175,16 @@ export const reportRender = (
   }
   const time = getSelfTime(fiber) ?? 0;
 
+  const baseReport = report || {
+    count: 0,
+    time: 0,
+    badRenders: [],
+  };
+
   ReactScanInternals.reportData[name] = {
-    count: (report?.count ?? 0) + 1,
-    time: (report?.time ?? 0) + time,
-    badRenders: report?.badRenders || [],
+    count: baseReport.count + 1,
+    time: baseReport.time + time,
+    badRenders: baseReport.badRenders,
   };
 };
 
