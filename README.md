@@ -177,11 +177,13 @@ Example usage with options:
 > [!IMPORTANT]
 > By default, Metro bundler includes React Scan in production builds, which can add [up to 6MB](https://shopify.github.io/react-native-skia/docs/getting-started/installation/#bundle-size) to your bundle size. To prevent this, use our babel plugin:
 
-1. Create or modify your `babel.config.js`:
+1. If you are not using expo, install expo-babel-preset (works outside of expo):
+   `npm install babel-preset-expo`
+
+2. Create or modify your `babel.config.js`:
 
 ```js
 const { withReactScanTreeShake } = require('react-scan/babel');
-
 module.exports = withReactScanTreeShake({
   // Your existing babel options go here
 });
