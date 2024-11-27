@@ -55,6 +55,7 @@ export type ReactNativeScanOptions = Options &
     | 'includeChildren'
     | 'onPaintFinish'
     | 'onPaintStart'
+    | 'animationSpeed'
   >;
 
 const OptionsContext = createContext<
@@ -81,6 +82,10 @@ export const ReactScan = ({
   children: React.ReactNode;
   options?: ReactNativeScanOptions;
 }) => {
+  const withDefaultOptions = {
+    ...defaultOptions,
+    ...options,
+  };
   useEffect(() => {
     ReactScanInternals.options = options;
     instrumentNative();
@@ -106,14 +111,9 @@ export const ReactScan = ({
   return (
     <>
       {children}
-      <OptionsContext.Provider
-        value={{
-          ...defaultOptions,
-          ...options,
-        }}
-      >
+      <OptionsContext.Provider value={withDefaultOptions}>
         {!isPaused && <ReactScanCanvas scanTag="react-scan-no-traverse" />}
-        {options.showToolbar && (
+        {withDefaultOptions.showToolbar && (
           <ReactScanToolbar
             scanTag="react-scan-no-traverse"
             isPaused={isPaused}
