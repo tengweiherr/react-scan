@@ -1,3 +1,4 @@
+import * as _ from '../instrumentation/placeholder';
 import { UIManager } from 'react-native';
 import { Fiber } from 'react-reconciler';
 import { Measurement, MeasurementValue, ReactScanInternals } from '../..';
@@ -120,7 +121,6 @@ export const measureFiber = (
   });
 };
 
-
 const getKey = (measurement: MeasurementValue) => {
   return `${measurement.pageX}-${measurement.pageY}-${measurement.width}-${measurement.height}`;
 };
@@ -176,7 +176,7 @@ const updateOutlines = async (fiber: Fiber, render: Render) => {
       };
       ReactScanInternals.activeOutlines.push({
         outline: newOutline,
-        id:genId(),
+        id: genId(),
         resolve: () => {
           /* noop in native since we aren't "painting" lines like web does with canvas*/
         },

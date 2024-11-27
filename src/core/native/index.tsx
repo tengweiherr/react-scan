@@ -63,19 +63,20 @@ const OptionsContext = createContext<
   animationWhenFlashing: false,
 });
 
+const defaultOptions = {
+  alwaysShowLabels: false,
+  animationWhenFlashing: false as const,
+  enabled: true,
+  log: false,
+  maxRenders: 20,
+  renderCountThreshold: 0,
+  report: false,
+  resetCountTimeout: 5000,
+  showToolbar: true,
+};
 export const ReactScan = ({
   children,
-  options = {
-    alwaysShowLabels: false,
-    animationWhenFlashing: false,
-    enabled: true,
-    log: false,
-    maxRenders: 20,
-    renderCountThreshold: 0,
-    report: false,
-    resetCountTimeout: 5000,
-    showToolbar: true,
-  },
+  options,
 }: {
   children: React.ReactNode;
   options?: ReactNativeScanOptions;
@@ -107,8 +108,8 @@ export const ReactScan = ({
       {children}
       <OptionsContext.Provider
         value={{
+          ...defaultOptions,
           ...options,
-          animationWhenFlashing: false,
         }}
       >
         {!isPaused && <ReactScanCanvas scanTag="react-scan-no-traverse" />}
@@ -250,7 +251,7 @@ const ReactScanCanvas = (_: { scanTag: string }) => {
         pointerEvents: 'none',
       }}
     >
-      <Group>
+      <Group opacity={opacity}>
         {outlines
           .filter(({ outline }) => {
             const measurement = assertNative(outline.latestMeasurement).value;

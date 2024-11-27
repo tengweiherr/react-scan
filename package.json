@@ -96,7 +96,11 @@
     },
     "./dist/*": "./dist/*.js",
     "./dist/*.js": "./dist/*.js",
-    "./dist/*.mjs": "./dist/*.mjs"
+    "./dist/*.mjs": "./dist/*.mjs",
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "default": "./dist/native.js"
+    }
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
