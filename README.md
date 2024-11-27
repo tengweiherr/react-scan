@@ -130,7 +130,11 @@ import { ReactScan } from 'react-scan/native';
 // For Expo, in _layout.tsx:
 export default function Layout() {
   return (
-    <ReactScan>
+    <ReactScan
+      options={{
+        animationWhenFlashing: 'fade-out',
+      }}
+    >
       <Stack>{/* Your app content */}</Stack>
     </ReactScan>
   );
@@ -163,7 +167,7 @@ Example usage with options:
   options={{
     enabled: true,
     log: true,
-    animationWhenFlashing: 'fade-out',
+    animationWhenFlashing: false,
   }}
 >
   {/* Your app content */}
