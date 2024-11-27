@@ -12,11 +12,49 @@ const measurementCache = new WeakMap<
   { measurement: MeasurementValue; timestamp: number }
 >();
 
-export const measureFiber = (
-  fiber: Fiber,
-  callback?: (coords: MeasurementValue | null) => void,
-): Promise<MeasurementValue | null> => {
-  return new Promise((resolve) => {
+// React native gives warnings if too many promises are pending
+let pendingCount = 0;
+const MAX_PENDING = 50;
+const queue: Array<{
+  fiber: Fiber;
+  callback?: (coords: MeasurementValue | null) => void;
+  resolve: (value: MeasurementValue | null) => void;
+}> = [];
+
+const processQueue = () => {
+  if (pendingCount >= MAX_PENDING || queue.length === 0) {
+    return;
+  }
+
+  const { fiber, callback, resolve } = queue.shift()!;
+  pendingCount++;
+
+  const handleMeasurement = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    pageX: number,
+    pageY: number,
+  ) => {
+    const coords: MeasurementValue = { width, height, pageX, pageY, x, y };
+    measurementCache.set(fiber, {
+      measurement: coords,
+      timestamp: Date.now(),
+    });
+    if (fiber.alternate) {
+      measurementCache.set(fiber.alternate, {
+        measurement: coords,
+        timestamp: Date.now(),
+      });
+    }
+    callback?.(coords);
+    resolve(coords);
+    pendingCount--;
+    processQueue();
+  };
+
+  const executeMeasurement = () => {
     const now = Date.now();
     const cached = measurementCache.get(fiber);
 
@@ -24,35 +62,14 @@ export const measureFiber = (
     if (cached && now - cached.timestamp < 250) {
       callback?.(cached.measurement);
       resolve(cached.measurement);
+      pendingCount--;
+      processQueue();
       return;
     }
 
-    const handleMeasurement = (
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-      pageX: number,
-      pageY: number,
-    ) => {
-      const coords: MeasurementValue = { width, height, pageX, pageY, x, y };
-      measurementCache.set(fiber, {
-        measurement: coords,
-        timestamp: Date.now(),
-      });
-      if (fiber.alternate) {
-        measurementCache.set(fiber.alternate, {
-          measurement: coords,
-          timestamp: Date.now(),
-        });
-      }
-      callback?.(coords);
-      resolve(coords);
-    };
-
     let measurableNode: Fiber | null = fiber;
     while (measurableNode) {
-      // valid for new archicture
+      // valid for new architecture
       if (measurableNode.stateNode?.canonical?.nativeTag) {
         UIManager.measure(
           measurableNode.stateNode.canonical.nativeTag,
@@ -68,7 +85,7 @@ export const measureFiber = (
         );
         return;
       }
-      // _should_ be valid in both enviornments
+      // _should_ be valid in both environments
       if (measurableNode.stateNode?.measureInWindow) {
         measurableNode.stateNode.measureInWindow(
           (x: number, y: number, width: number, height: number) => {
@@ -86,8 +103,23 @@ export const measureFiber = (
     // If we couldn't find any measurable node
     callback?.(null);
     resolve(null);
+    pendingCount--;
+    processQueue();
+  };
+
+  executeMeasurement();
+};
+
+export const measureFiber = (
+  fiber: Fiber,
+  callback?: (coords: MeasurementValue | null) => void,
+): Promise<MeasurementValue | null> => {
+  return new Promise((resolve) => {
+    queue.push({ fiber, callback, resolve });
+    processQueue();
   });
 };
+
 
 const getKey = (measurement: MeasurementValue) => {
   return `${measurement.pageX}-${measurement.pageY}-${measurement.width}-${measurement.height}`;
