@@ -4,8 +4,10 @@ import {
   FunctionComponentTag,
   ClassComponentTag,
   isHostComponent,
-  ForwardRefTag,
   traverseFiber,
+  MemoComponentTag,
+  SimpleMemoComponentTag,
+  ForwardRefTag,
 } from '../../instrumentation/fiber';
 import { getRect } from '../outline';
 
@@ -74,7 +76,7 @@ export const getParentCompositeFiber = (fiber: Fiber) => {
   let prevNonHost = null;
 
   while (curr) {
-    if (curr.tag === FunctionComponentTag || curr.tag === ClassComponentTag) {
+    if (isCompositeComponent(curr)) {
       return [curr, prevNonHost] as const;
     }
     if (isHostComponent(curr)) {
@@ -100,8 +102,13 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
 
 export const getStateFromFiber = (fiber: Fiber): any => {
   if (!fiber) return {};
-
-  if (fiber.tag === FunctionComponentTag || fiber.tag === ForwardRefTag) {
+  // only funtional components have memo tags,
+  if (
+    fiber.tag === FunctionComponentTag ||
+    fiber.tag === ForwardRefTag ||
+    fiber.tag === SimpleMemoComponentTag ||
+    fiber.tag === MemoComponentTag
+  ) {
     // Functional component, need to traverse hooks
     let memoizedState = fiber.memoizedState;
     const state: any = {};
@@ -259,4 +266,37 @@ export const hasValidParent = () => {
     }
   }
   return hasValidParent;
+};
+
+export const isCompositeComponent = (fiber: Fiber) => {
+  return (
+    fiber.tag === FunctionComponentTag ||
+    fiber.tag === ClassComponentTag ||
+    fiber.tag === SimpleMemoComponentTag ||
+    fiber.tag === MemoComponentTag
+  );
+};
+
+export const getOverrideProps = () => {
+  let overrideProps = null;
+  if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
+    const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+    if (!renderers) return null;
+    for (const [_, renderer] of Array.from(renderers)) {
+      try {
+        if (overrideProps) {
+          const prevOverrideProps = overrideProps;
+          overrideProps = (fiber: Fiber, key: string, value: any) => {
+            prevOverrideProps(fiber, key, value);
+            renderer.overrideProps(fiber, key, value);
+          };
+        } else {
+          overrideProps = renderer.overrideProps;
+        }
+      } catch (e) {
+        /**/
+      }
+    }
+  }
+  return overrideProps;
 };

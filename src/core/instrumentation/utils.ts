@@ -63,6 +63,8 @@ export const getType = (type: any): any => {
 };
 
 export const getDisplayName = (type: any): string | null => {
+  const name = type.displayName || type.name || null;
+  if (name) return name;
   type = getType(type);
   if (!type) return null;
   return type.displayName || type.name || null;

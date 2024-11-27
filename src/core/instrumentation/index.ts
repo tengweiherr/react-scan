@@ -1,6 +1,8 @@
 import * as React from 'react';
 import type { Fiber, FiberRoot } from 'react-reconciler';
 import { ReactScanInternals } from '../index';
+import { isCompositeComponent } from '../web/inspect-element/utils';
+import { getDisplayName, fastSerialize, getType } from './utils';
 import {
   didFiberRender,
   getSelfTime,
@@ -10,8 +12,7 @@ import {
   traverseFiber,
   traverseState,
 } from './fiber';
-import { registerDevtoolsHook } from './placeholder';
-import { fastSerialize, getDisplayName, getType } from './utils';
+import { registerDevtoolsHook } from './init';
 
 export interface Change {
   name: string;
@@ -166,6 +167,7 @@ export const reportRender = (
     count: baseReport.count + 1,
     time: baseReport.time + time,
     badRenders: baseReport.badRenders,
+    type: getType(fiber.type) || fiber.type,
   };
 };
 export const reportRenderFiber = (fiber: Fiber, renders: (Render | null)[]) => {
@@ -205,7 +207,7 @@ export const reportRenderFiber = (fiber: Fiber, renders: (Render | null)[]) => {
     count: baseReport.count + 1,
     time: baseReport.time + (time !== 0 ? time : 0.1), // .1ms lowest precision
     badRenders: baseReport.badRenders,
-    displayName: getDisplayName(fiber.type),
+    displayName: getDisplayName(fiber),
   });
   ReactScanInternals.emit(
     'reportDataByFiber',
@@ -249,9 +251,15 @@ export const instrument = ({
         }
       }
       const name = getDisplayName(type);
+      if (name === 'Million(Profiler)') return;
       if (name) {
-        reportRenderFiber(fiber, [propsRender, contextRender]); // back compat
-        reportRender(name, fiber, [propsRender, contextRender]);
+        reportRender(name, fiber, [propsRender, contextRender]); // back compat
+      }
+
+      if (
+        isCompositeComponent(fiber) // since we key on the fiber we don't need a display name (ex. memo compoenents are anonymous and dont have names)
+      ) {
+        reportRenderFiber(fiber, [propsRender, contextRender]);
       }
 
       if (!propsRender && !contextRender) return null;

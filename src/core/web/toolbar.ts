@@ -1,16 +1,31 @@
-import { ReactScanInternals } from '../../index';
-import { createElement } from './utils';
+import { ReactScanInternals, setOptions } from '../../index';
+import { createElement, throttle } from './utils';
 import { MONO_FONT } from './outline';
 import { INSPECT_TOGGLE_ID } from './inspect-element/inspect-state-machine';
-import {
-  getNearestFiberFromElement,
-  hasValidParent,
-} from './inspect-element/utils';
+import { getNearestFiberFromElement } from './inspect-element/utils';
 
 let isDragging = false;
-export const createToolbar = () => {
+let isResizing = false;
+let initialWidth = 0;
+let initialMouseX = 0;
+
+const EDGE_PADDING = 15;
+const ANIMATION_DURATION = 300; // milliseconds
+
+export const persistSizeToLocalStorage = throttle((width: number) => {
+  localStorage.setItem('react-scan-toolbar-width', String(width));
+}, 100);
+
+export const restoreSizeFromLocalStorage = (el: HTMLDivElement) => {
+  const width = localStorage.getItem('react-scan-toolbar-width');
+  el.style.width = `${width ?? 360}px`;
+};
+
+export const createToolbar = (): (() => void) => {
   if (typeof window === 'undefined') {
-    return;
+    return () => {
+      /**/
+    };
   }
 
   const PLAY_SVG = `
@@ -21,8 +36,17 @@ export const createToolbar = () => {
   `;
   const INSPECTING_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-dashed-mouse-pointer"><path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"/><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h2"/><path d="M14 3h1"/><path d="M3 9v1"/><path d="M21 9v2"/><path d="M3 14v1"/></svg>`;
   const FOCUSING_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-mouse-pointer"><path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"/><path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/></svg>`;
-  const PREVIOUS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>`;
+  const NEXT_SVG = `<svg class="nav-button" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h6V5l7 7-7 7v-4H6V9z"/></svg>`;
+  const PREVIOUS_SVG = `<svg class="nav-button" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></svg>`;
   const TRANSITION_MS = '150ms';
+
+  const SOUND_ON_SVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-2"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+  `;
+
+  const SOUND_OFF_SVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+  `;
 
   const toolbar = createElement(`
   <div id="react-scan-toolbar" style="
@@ -52,6 +76,7 @@ export const createToolbar = () => {
       overflow: hidden;
       width: fit-content;
       min-width: min-content;
+      position: relative;
     ">
       <div style="display: flex; align-items: center; height: 36px; width: 100%;">
         <button id="${INSPECT_TOGGLE_ID}" style="
@@ -86,6 +111,22 @@ export const createToolbar = () => {
         " title="Start">
           ${PLAY_SVG}
         </button>
+        <button id="react-scan-sound-toggle" style="
+          padding: 0 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: none;
+          border: none;
+          color: #fff;
+          cursor: pointer;
+          transition: all ${TRANSITION_MS} ease;
+          height: 100%;
+          min-width: 36px;
+          outline: none;
+        " title="Sound On">
+          ${SOUND_ON_SVG}
+        </button>
         <div style="
           padding: 0 12px;
           color: #fff;
@@ -97,29 +138,13 @@ export const createToolbar = () => {
           justify-content: space-evenly;
         ">
           <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="react-scan-parent-focus" style="
+          <button id="react-scan-previous-focus" style="
               padding: 4px 10px;
-              display: none;
+              display: flex;
               align-items: center;
               justify-content: center;
               background: none;
-              color: #fff;
-              cursor: pointer;
-              transition: all ${TRANSITION_MS} ease;
-              height: 26px;
-              outline: none;
-               border: none;
-              font-size: 12px;
-              white-space: nowrap;
-               font-family: ${MONO_FONT};
-            ">go to parent</button>
-            <button id="react-scan-previous-focus" style="
-              padding: 4px 10px;
-              display: none;
-              align-items: center;
-              justify-content: center;
-              background: none;
-              color: #fff;
+              color: #999;
               cursor: pointer;
               transition: all ${TRANSITION_MS} ease;
               height: 26px;
@@ -128,6 +153,22 @@ export const createToolbar = () => {
               font-size: 12px;
               white-space: nowrap;
             ">${PREVIOUS_SVG}</button>
+            <button id="react-scan-next-focus" style="
+              padding: 4px 10px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background: none;
+              color: #999;
+              cursor: pointer;
+              transition: all ${TRANSITION_MS} ease;
+              height: 26px;
+              outline: none;
+               border: none;
+              font-size: 12px;
+              white-space: nowrap;
+               font-family: ${MONO_FONT};
+            ">${NEXT_SVG}</button>
           </div>
            <span style="font-size: 14px; font-weight: 500;">react-scan</span>
         </div>
@@ -136,6 +177,7 @@ export const createToolbar = () => {
         pointer-events: auto;
         background: #000;
         border-top: 1px solid rgba(255, 255, 255, 0.1);
+        min-width: 100%;
         width: 360px;
         overflow: auto;
         max-height: 0;
@@ -143,6 +185,15 @@ export const createToolbar = () => {
       ">
         <!-- Props content will be injected here -->
       </div>
+      <div id="react-scan-resize-handle" style="
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        cursor: ew-resize;
+        dis
+      "></div>
     </div>
   </div>
 `) as HTMLDivElement;
@@ -153,10 +204,12 @@ export const createToolbar = () => {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
+
   .react-scan-inspector {
     font-size: 13px;
     width: 360px;
     color: #fff;
+    width: 100%;
   }
 
   .react-scan-header {
@@ -207,6 +260,10 @@ export const createToolbar = () => {
     color: #fff;
   }
 
+  .react-scan-warning {
+    padding-right: 4px;
+  }
+
   .react-scan-string {
     color: #9ECBFF;
   }
@@ -217,6 +274,12 @@ export const createToolbar = () => {
 
   .react-scan-boolean {
     color: #56B6C2;
+  }
+
+  .react-scan-input {
+    background: #000;
+    border: none;
+    color: #fff;
   }
 
   .react-scan-object-key {
@@ -342,56 +405,66 @@ export const createToolbar = () => {
     background: rgba(255, 255, 255, 0.3);
   }
 
-  ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
+  #react-scan-toolbar::-webkit-scrollbar {
+	  width: 4px;
+	  height: 4px;
+	}
 
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
+	#react-scan-toolbar::-webkit-scrollbar-track {
+	  background: rgba(255, 255, 255, 0.1);
+	  border-radius: 4px;
+	}
 
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-}
+	#react-scan-toolbar::-webkit-scrollbar-thumb {
+	  background: rgba(255, 255, 255, 0.3);
+	  border-radius: 4px;
+	}
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
+	#react-scan-toolbar::-webkit-scrollbar-thumb:hover {
+	  background: rgba(255, 255, 255, 0.4);
+	}
 
-/* For Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
-}
+	/* For Firefox */
+	#react-scan-toolbar * {
+	  scrollbar-width: thin;
+	  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+	}
+
+  .nav-button {
+    opacity: var(--nav-opacity, 1);
+  }
   `;
 
-  document.head.appendChild(styleElement);
+  if (document.head) document.head.appendChild(styleElement);
 
   const inspectBtn = toolbar.querySelector<HTMLButtonElement>(
     `#${INSPECT_TOGGLE_ID}`,
   )!;
   const powerBtn =
     toolbar.querySelector<HTMLButtonElement>('#react-scan-power')!;
-  const parentFocusBtn = toolbar.querySelector<HTMLButtonElement>(
-    '#react-scan-parent-focus',
+  const nextFocusBtn = toolbar.querySelector<HTMLButtonElement>(
+    '#react-scan-next-focus',
   )!;
   const previousFocusBtn = toolbar.querySelector<HTMLButtonElement>(
     '#react-scan-previous-focus',
   )!;
+  const soundToggleBtn = toolbar.querySelector<HTMLButtonElement>(
+    '#react-scan-sound-toggle',
+  )!;
 
-  const focusHistory: HTMLElement[] = [];
   const propContainer =
     toolbar.querySelector<HTMLDivElement>('#react-scan-props')!;
   const toolbarContent = toolbar.querySelector<HTMLElement>(
     '#react-scan-toolbar-content',
   )!;
+  const resizeHandle = toolbar.querySelector<HTMLElement>(
+    '#react-scan-resize-handle',
+  )!;
 
   let isActive = !ReactScanInternals.isPaused;
+  let isSoundOn = false;
 
-  document.body.appendChild(toolbar);
+  document.documentElement.appendChild(toolbar);
 
   let initialX = 0;
   let initialY = 0;
@@ -404,11 +477,59 @@ export const createToolbar = () => {
 
   updateToolbarPosition(0, 0);
 
+  const ensureToolbarInBounds = () => {
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const edges = [
+      {
+        edge: 'left',
+        distance: Math.abs(toolbarRect.left - EDGE_PADDING),
+        deltaX: EDGE_PADDING - toolbarRect.left,
+        deltaY: 0,
+      },
+      {
+        edge: 'right',
+        distance: Math.abs(viewportWidth - EDGE_PADDING - toolbarRect.right),
+        deltaX: viewportWidth - EDGE_PADDING - toolbarRect.right,
+        deltaY: 0,
+      },
+      {
+        edge: 'top',
+        distance: Math.abs(toolbarRect.top - EDGE_PADDING),
+        deltaX: 0,
+        deltaY: EDGE_PADDING - toolbarRect.top,
+      },
+      {
+        edge: 'bottom',
+        distance: Math.abs(viewportHeight - EDGE_PADDING - toolbarRect.bottom),
+        deltaX: 0,
+        deltaY: viewportHeight - EDGE_PADDING - toolbarRect.bottom,
+      },
+    ];
+
+    const closestEdge = edges.reduce((prev, curr) =>
+      curr.distance < prev.distance ? curr : prev,
+    );
+
+    currentX += closestEdge.deltaX;
+    currentY += closestEdge.deltaY;
+
+    toolbar.style.transition = `transform ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+    updateToolbarPosition(currentX, currentY);
+
+    setTimeout(() => {
+      toolbar.style.transition = '';
+    }, ANIMATION_DURATION);
+  };
+
   toolbarContent.addEventListener('mousedown', (event: any) => {
     if (
       event.target === inspectBtn ||
       event.target === powerBtn ||
-      event.target === parentFocusBtn
+      event.target === nextFocusBtn ||
+      event.target === resizeHandle
     )
       return;
 
@@ -424,44 +545,39 @@ export const createToolbar = () => {
     event.preventDefault();
   });
 
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    initialWidth = propContainer.offsetWidth;
+    initialMouseX = e.clientX;
+    e.preventDefault();
+  });
+
   document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
+    if (isDragging) {
+      const x = e.clientX - initialX;
+      const y = e.clientY - initialY;
 
-    const x = e.clientX - initialX;
-    const y = e.clientY - initialY;
+      currentX = x;
+      currentY = y;
+      updateToolbarPosition(x, y);
+    }
 
-    currentX = x;
-    currentY = y;
-    updateToolbarPosition(x, y);
+    if (isResizing) {
+      const width = initialWidth - (e.clientX - initialMouseX);
+      propContainer.style.width = `${Math.max(360, width)}px`;
+      persistSizeToLocalStorage(width);
+    }
   });
 
   document.addEventListener('mouseup', () => {
-    if (!isDragging) return;
-    isDragging = false;
-    toolbar.style.transition = '';
-  });
-
-  const updateNavigationButtons = () => {
-    if (ReactScanInternals.inspectState.kind === 'focused') {
-      const validParent = hasValidParent();
-      if (!ReactScanInternals.inspectState.focusedDomElement) {
-        parentFocusBtn.style.display = 'none';
-        previousFocusBtn.style.display = 'none';
-      }
-
-      parentFocusBtn.style.display = 'flex';
-      parentFocusBtn.style.color = validParent ? '#999' : '#444';
-      parentFocusBtn.style.cursor = validParent ? 'pointer' : 'not-allowed';
-
-      previousFocusBtn.style.display = 'flex';
-      previousFocusBtn.style.color = focusHistory.length > 0 ? '#999' : '#444';
-      previousFocusBtn.style.cursor =
-        focusHistory.length > 0 ? 'pointer' : 'not-allowed';
-    } else {
-      parentFocusBtn.style.display = 'none';
-      previousFocusBtn.style.display = 'none';
+    if (isDragging) {
+      isDragging = false;
+      ensureToolbarInBounds();
     }
-  };
+    if (isResizing) {
+      isResizing = false;
+    }
+  });
 
   const updateUI = () => {
     powerBtn.innerHTML = isActive ? PAUSE_SVG : PLAY_SVG;
@@ -471,6 +587,9 @@ export const createToolbar = () => {
 
     const isInspectActive =
       ReactScanInternals.inspectState.kind === 'inspecting';
+
+    nextFocusBtn.style.display = focusActive ? 'flex' : 'none';
+    previousFocusBtn.style.display = focusActive ? 'flex' : 'none';
 
     if (isInspectActive) {
       inspectBtn.innerHTML = INSPECTING_SVG;
@@ -486,9 +605,14 @@ export const createToolbar = () => {
       propContainer.style.maxHeight = '0';
       propContainer.style.width = 'fit-content';
       propContainer.innerHTML = '';
+      resizeHandle.style.display = 'none';
+    } else if (focusActive) {
+      resizeHandle.style.display = 'block';
     }
 
-    updateNavigationButtons();
+    soundToggleBtn.innerHTML = isSoundOn ? SOUND_ON_SVG : SOUND_OFF_SVG;
+    soundToggleBtn.style.color = isSoundOn ? '#fff' : '#999';
+    soundToggleBtn.title = isSoundOn ? 'Sound On' : 'Sound Off';
   };
 
   powerBtn.addEventListener('click', (e) => {
@@ -554,57 +678,95 @@ export const createToolbar = () => {
     updateUI();
   });
 
-  parentFocusBtn.addEventListener('click', (e) => {
+  nextFocusBtn.addEventListener('click', (e) => {
     e.stopPropagation();
 
     const currentState = ReactScanInternals.inspectState;
     if (currentState.kind !== 'focused') return;
 
     const { focusedDomElement } = currentState;
-    if (!focusedDomElement || !focusedDomElement.parentElement) return;
+    if (!focusedDomElement) return;
 
-    focusHistory.push(focusedDomElement);
+    let nextElement = focusedDomElement.firstElementChild as HTMLElement | null;
 
-    let nextParent: typeof focusedDomElement.parentElement | null =
-      focusedDomElement.parentElement;
-    const currentFiber = getNearestFiberFromElement(focusedDomElement);
-
-    while (nextParent) {
-      const parentFiber = getNearestFiberFromElement(nextParent);
-      if (
-        !parentFiber ||
-        parentFiber.memoizedProps !== currentFiber?.memoizedProps
-      ) {
-        break;
+    if (!nextElement) {
+      let current: HTMLElement | null = focusedDomElement;
+      while (current && !nextElement) {
+        nextElement = current.nextElementSibling as HTMLElement | null;
+        current = current.parentElement;
       }
-      nextParent = nextParent.parentElement;
     }
 
-    if (!nextParent) return;
+    const prevFiber = getNearestFiberFromElement(focusedDomElement);
+    const nextFiber = nextElement
+      ? getNearestFiberFromElement(nextElement)
+      : null;
 
-    ReactScanInternals.inspectState = {
-      kind: 'focused',
-      focusedDomElement: nextParent,
-      propContainer: currentState.propContainer,
-    };
+    if (nextElement && nextFiber !== prevFiber) {
+      ReactScanInternals.inspectState = {
+        kind: 'focused',
+        focusedDomElement: nextElement,
+        propContainer: currentState.propContainer,
+      };
+      nextFocusBtn.style.setProperty('--nav-opacity', '1');
+      nextFocusBtn.disabled = false;
+    } else {
+      nextFocusBtn.style.setProperty('--nav-opacity', '0.5');
+      nextFocusBtn.disabled = true;
+    }
+    previousFocusBtn.style.setProperty('--nav-opacity', '1');
+    previousFocusBtn.disabled = false;
   });
 
   previousFocusBtn.addEventListener('click', (e) => {
     e.stopPropagation();
 
     const currentState = ReactScanInternals.inspectState;
-    if (currentState.kind !== 'focused' || focusHistory.length === 0) return;
+    if (currentState.kind !== 'focused') return;
 
-    const previousElement = focusHistory.pop();
-    if (!previousElement) {
-      return; // invariant this exists
+    const { focusedDomElement } = currentState;
+    if (!focusedDomElement) return;
+
+    let prevElement: HTMLElement | null = null;
+
+    if (focusedDomElement.previousElementSibling) {
+      prevElement = focusedDomElement.previousElementSibling as HTMLElement;
+      while (prevElement.lastElementChild) {
+        prevElement = prevElement.lastElementChild as HTMLElement;
+      }
+    } else if (
+      focusedDomElement.parentElement &&
+      focusedDomElement.parentElement !== document.body
+    ) {
+      prevElement = focusedDomElement.parentElement;
     }
 
-    ReactScanInternals.inspectState = {
-      kind: 'focused',
-      focusedDomElement: previousElement,
-      propContainer: currentState.propContainer,
-    };
+    const prevFiber = getNearestFiberFromElement(focusedDomElement);
+    const nextFiber = prevElement
+      ? getNearestFiberFromElement(prevElement)
+      : null;
+
+    if (prevElement && prevFiber !== nextFiber) {
+      ReactScanInternals.inspectState = {
+        kind: 'focused',
+        focusedDomElement: prevElement,
+        propContainer: currentState.propContainer,
+      };
+      previousFocusBtn.style.setProperty('--nav-opacity', '1');
+      previousFocusBtn.disabled = false;
+    } else {
+      previousFocusBtn.style.setProperty('--nav-opacity', '0.5');
+      previousFocusBtn.disabled = true;
+    }
+    nextFocusBtn.style.setProperty('--nav-opacity', '1');
+    nextFocusBtn.disabled = false;
+  });
+
+  soundToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isSoundOn = !isSoundOn;
+    setOptions({ playSound: isSoundOn });
+    updateUI();
   });
 
   updateUI();
@@ -613,7 +775,7 @@ export const createToolbar = () => {
   if (existing) existing.remove();
 
   if (!toolbar.parentElement) {
-    document.body.appendChild(toolbar);
+    document.documentElement.appendChild(toolbar);
   }
 
   ReactScanInternals.inspectState = {
@@ -624,4 +786,20 @@ export const createToolbar = () => {
   ReactScanInternals.subscribe('inspectState', () => {
     updateUI();
   });
+
+  const handleViewportChange = throttle(() => {
+    if (!isDragging && !isResizing) {
+      ensureToolbarInBounds();
+    }
+  }, 100);
+
+  window.addEventListener('resize', handleViewportChange);
+  window.addEventListener('scroll', handleViewportChange);
+
+  const cleanup = () => {
+    window.removeEventListener('resize', handleViewportChange);
+    window.removeEventListener('scroll', handleViewportChange);
+  };
+
+  return cleanup;
 };

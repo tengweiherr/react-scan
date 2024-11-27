@@ -1,9 +1,5 @@
 import type { Render } from './instrumentation/index';
 
-export const NO_OP = () => {
-  /**/
-};
-
 export const getLabelText = (renders: Render[]) => {
   let labelText = '';
 
@@ -38,15 +34,12 @@ export const getLabelText = (renders: Render[]) => {
   );
 
   const parts: string[] = [];
-  for (const [name, { count, trigger, forget }] of sortedComponents) {
+  for (const [name, { count, forget }] of sortedComponents) {
     let text = name;
     if (count > 1) {
       text += ` ×${count}`;
     }
 
-    if (trigger) {
-      text = `🔥 ${text}`;
-    }
     if (forget) {
       text = `${text} ✨`;
     }

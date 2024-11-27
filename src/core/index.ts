@@ -16,6 +16,7 @@ import {
   type States,
 } from './web/inspect-element/inspect-state-machine';
 import { createToolbar } from './web/toolbar';
+import { getType } from './instrumentation/utils';
 
 export interface Options {
   /**
@@ -91,6 +92,13 @@ export interface Options {
    */
   alwaysShowLabels?: boolean;
 
+  /**
+   * Animation speed
+   *
+   * @default "fast"
+   */
+  animationSpeed?: 'slow' | 'fast' | 'off';
+
   onCommitStart?: () => void;
   onRender?: (fiber: Fiber, render: Render) => void;
   onCommitFinish?: () => void;
@@ -106,6 +114,7 @@ export interface Internals {
   options: Options;
   scheduledOutlines: PendingOutline[];
   activeOutlines: ActiveOutline[];
+  onRender: ((fiber: Fiber, render: Render) => void) | null;
   reportDataByFiber: WeakMap<
     Fiber,
     {
@@ -120,6 +129,7 @@ export interface Internals {
     {
       count: number;
       time: number;
+      type: unknown;
       badRenders: Render[];
     }
   >;
@@ -251,7 +261,9 @@ export const ReactScanInternals = createStore<Internals>({
     renderCountThreshold: 0,
     report: undefined,
     alwaysShowLabels: false,
+    animationSpeed: 'fast',
   },
+  onRender: null,
   reportData: {},
   reportDataByFiber: new WeakMap(),
   scheduledOutlines: [],
@@ -277,15 +289,14 @@ export const start = () => {
   if (typeof window === 'undefined') {
     return;
   }
-  const { options } = ReactScanInternals;
 
   if (document.querySelector('react-scan-overlay')) return;
   initReactScanOverlay();
 
   const overlayElement = document.createElement('react-scan-overlay') as any;
-  document.body.appendChild(overlayElement);
+  document.documentElement.appendChild(overlayElement);
 
-  if (options.showToolbar) {
+  if (ReactScanInternals.options.showToolbar) {
     createToolbar();
   }
   const ctx = overlayElement.getContext();
@@ -307,19 +318,19 @@ export const start = () => {
 
   instrument({
     onCommitStart() {
-      options.onCommitStart?.();
+      ReactScanInternals.options.onCommitStart?.();
     },
     onRender(fiber, render) {
       if (ReactScanInternals.isPaused) {
         // don't draw if it's paused
         return;
       }
-      options.onRender?.(fiber, render);
+      ReactScanInternals.options.onRender?.(fiber, render);
       const outline = getOutline(fiber, render);
       if (!outline) return;
       ReactScanInternals.scheduledOutlines.push(outline);
 
-      if (options.playSound && audioContext) {
+      if (ReactScanInternals.options.playSound && audioContext) {
         const renderTimeThreshold = 10;
         const amplitude = Math.min(
           1,
@@ -330,7 +341,7 @@ export const start = () => {
       flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
-      options.onCommitFinish?.();
+      ReactScanInternals.options.onCommitFinish?.();
     },
   });
 };
@@ -369,4 +380,28 @@ export const useScan = (options: Options) => {
   React.useEffect(() => {
     scan(options);
   }, []);
+};
+
+export const onRender = (
+  type: unknown,
+  _onRender: (fiber: Fiber, render: Render) => void,
+) => {
+  const prevOnRender = ReactScanInternals.onRender;
+  ReactScanInternals.onRender = (fiber, render) => {
+    prevOnRender?.(fiber, render);
+    if (getType(fiber.type) === type) {
+      _onRender(fiber, render);
+    }
+  };
+};
+
+export const getRenderInfo = (type: unknown) => {
+  type = getType(type) || type;
+  const reportData = ReactScanInternals.reportData;
+  for (const componentName in reportData) {
+    if (reportData[componentName].type === type) {
+      return reportData[componentName];
+    }
+  }
+  return null;
 };

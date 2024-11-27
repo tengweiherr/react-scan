@@ -8,17 +8,24 @@ import {
   type BrowserContext,
 } from 'playwright';
 import mri from 'mri';
-import {
-  intro,
-  confirm,
-  isCancel,
-  cancel,
-  spinner,
-  outro,
-} from '@clack/prompts';
+import { intro, confirm, isCancel, cancel, spinner } from '@clack/prompts';
 import { bgMagenta, dim, red } from 'kleur';
 import fs from 'node:fs';
 import path from 'node:path';
+
+const truncateString = (str: string, maxLength: number) => {
+  str = str.replace('http://', '').replace('https://', '').replace('www.', '');
+  if (str.endsWith('/')) {
+    str = str.slice(0, -1);
+  }
+  if (str.length > maxLength) {
+    const half = Math.floor(maxLength / 2);
+    const start = str.slice(0, half);
+    const end = str.slice(str.length - (maxLength - half));
+    return start + '…' + end;
+  }
+  return str;
+};
 
 const inferValidURL = (maybeURL: string) => {
   try {
@@ -216,23 +223,21 @@ const init = async () => {
 
   const pollReport = async () => {
     if (page.url() !== currentURL) return;
-    await page
-      .evaluate(() => {
-        const globalHook = globalThis.__REACT_SCAN__;
-        if (!globalHook) return;
-        const reportData = globalHook.ReactScanInternals.reportData;
-        if (!Object.keys(reportData).length) return;
-        console.log(
-          'REACT_SCAN_REPORT',
-          JSON.stringify(reportData, (key, value) => {
-            return ['prevValue', 'nextValue'].includes(key) ? undefined : value;
-          }),
-        );
-      })
-      .catch(() => {});
+    await page.evaluate(() => {
+      const globalHook = globalThis.__REACT_SCAN__;
+      if (!globalHook) return;
+      const reportData = globalHook.ReactScanInternals.reportData;
+      if (!Object.keys(reportData).length) return;
+      let count = 0;
+      for (const componentName in reportData) {
+        count += reportData[componentName].count;
+      }
+
+      console.log('REACT_SCAN_REPORT', count);
+    });
   };
 
-  let renders = 0;
+  let count = 0;
   let currentSpinner: ReturnType<typeof spinner> | undefined;
   let currentURL = urlString;
 
@@ -240,10 +245,11 @@ const init = async () => {
   const inject = async (url: string) => {
     if (interval) clearInterval(interval);
     currentURL = url;
-    currentSpinner?.stop(`${url}${renders ? ` (×${renders})` : ''}`);
+    const truncatedURL = truncateString(url, 50);
+    currentSpinner?.stop(`${truncatedURL}${count ? ` (×${count})` : ''}`);
     currentSpinner = spinner();
-    currentSpinner.start(dim(`Scanning: ${url}`));
-    renders = 0;
+    currentSpinner.start(dim(`Scanning: ${truncatedURL}`));
+    count = 0;
     try {
       await page.waitForLoadState('load');
       await page.waitForTimeout(500);
@@ -262,10 +268,10 @@ const init = async () => {
         globalThis.__REACT_SCAN__.ReactScanInternals.reportData = {};
       });
       interval = setInterval(() => {
-        pollReport();
+        pollReport().catch(() => {});
       }, 1000);
     } catch (e) {
-      currentSpinner?.stop(red(`Failed to inject React Scan to: ${url}`));
+      currentSpinner?.stop(red(`Error: ${truncatedURL}`));
     }
   };
 
@@ -283,22 +289,16 @@ const init = async () => {
       return;
     }
     const reportDataString = text.replace('REACT_SCAN_REPORT', '').trim();
-    const reportData = JSON.parse(reportDataString);
-    let newRenders = 0;
-    for (const componentName in reportData) {
-      const componentData = reportData[componentName];
-      newRenders += componentData.count;
-    }
-    const msgURL = msg.location().url;
-    if (msgURL !== currentURL) {
-      currentSpinner?.stop(`${msgURL}${renders ? ` (×${renders})` : ''}`);
+    try {
+      count = parseInt(reportDataString, 10);
+    } catch {
       return;
     }
-    renders = newRenders;
 
+    const truncatedURL = truncateString(currentURL, 50);
     if (currentSpinner) {
       currentSpinner.message(
-        dim(`Scanning: ${currentURL}${renders ? ` (×${renders})` : ''}`),
+        dim(`Scanning: ${truncatedURL}${count ? ` (×${count})` : ''}`),
       );
     }
   });

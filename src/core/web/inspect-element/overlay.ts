@@ -67,15 +67,17 @@ export const drawHoverOverlay = (
     }
 
     const animate = () => {
+      const t =
+        ReactScanInternals.options.animationSpeed === 'fast'
+          ? 0.51
+          : ReactScanInternals.options.animationSpeed === 'slow'
+            ? 0.1
+            : 0;
       currentRect = {
-        left: linearInterpolation(currentRect!.left, targetRect.left, 0.1),
-        top: linearInterpolation(currentRect!.top, targetRect.top, 0.1),
-        width: linearInterpolation(currentRect!.width, targetRect.width, 0.1),
-        height: linearInterpolation(
-          currentRect!.height,
-          targetRect.height,
-          0.1,
-        ),
+        left: linearInterpolation(currentRect!.left, targetRect.left, t),
+        top: linearInterpolation(currentRect!.top, targetRect.top, t),
+        width: linearInterpolation(currentRect!.width, targetRect.width, t),
+        height: linearInterpolation(currentRect!.height, targetRect.height, t),
       };
 
       drawRect(currentRect, canvas, ctx, kind, stats, parentCompositeFiber);
@@ -162,10 +164,14 @@ export const drawStatsPill = (
 ) => {
   const pillHeight = 24;
   const pillPadding = 8;
-  const componentName = fiber
-    ? (getDisplayName(fiber) ?? 'Unknown')
-    : 'Unknown';
-  const text = `${componentName} • x${stats.count} (${stats.time.toFixed(1)}ms)`;
+  const componentName = getDisplayName(fiber) ?? 'Unknown';
+  let text = componentName;
+  if (stats.count) {
+    text += ` • ×${stats.count}`;
+    if (stats.time) {
+      text += ` (${stats.time.toFixed(1)}ms)`;
+    }
+  }
 
   ctx.save();
   ctx.font = '12px system-ui, -apple-system, sans-serif';

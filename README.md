@@ -163,8 +163,8 @@ if (typeof window !== 'undefined') {
 
 <br />
 
-```jsx
-{
+```tsx
+export interface Options {
   /**
    * Enable/disable scanning
    *
@@ -238,6 +238,13 @@ if (typeof window !== 'undefined') {
    */
   alwaysShowLabels?: boolean;
 
+  /**
+   * Animation speed
+   *
+   * @default "fast"
+   */
+  animationSpeed?: 'slow' | 'fast' | 'off';
+
   onCommitStart?: () => void;
   onRender?: (fiber: Fiber, render: Render) => void;
   onCommitFinish?: () => void;
@@ -248,9 +255,14 @@ if (typeof window !== 'undefined') {
 
 </details>
 
-- `scan(options)`: Imperative API to start scanning
-- `useScan(options)`: Hook API to start scanning
-- `withScan(Component, options)`: Useful if you only want to scan a specific component
+- `scan(options: Options)`: Imperative API to start scanning
+- `useScan(options: Options)`: Hook API to start scanning
+- `withScan(Component, options: Options)`: Whitelist a specific component, do not scan other components
+- `getReport()`: Get a report of all the renders
+- `setOptions(options: Options): void`: Set options at runtime
+- `getOptions()`: Get the current options
+- `onRender(Component, onRender: (fiber: Fiber, render: Render) => void)`: Hook into a specific component's renders
+- `getRenderInfo(Component)`: Get the render info for a specific component
 
 ## Why React Scan?
 
@@ -258,7 +270,7 @@ React can be tricky to optimize.
 
 The issue is that component props are compared by reference, not value. This is intentional – this way rendering can be cheap to run.
 
-However, this makes it easy to accidentally cause unnecessary renders, making the the app slow. Even in production apps, with hundreds of engineers, can't fully optimize their apps (see [GitHub](https://github.com/aidenybai/react-scan/blob/main/.github/assets/github.mp4), [Twitter](https://github.com/aidenybai/react-scan/blob/main/.github/assets/twitter.mp4), and [Instagram](https://github.com/aidenybai/react-scan/blob/main/.github/assets/instagram.mp4)).
+However, this makes it easy to accidentally cause unnecessary renders, making the app slow. Even in production apps, with hundreds of engineers, can't fully optimize their apps (see [GitHub](https://github.com/aidenybai/react-scan/blob/main/.github/assets/github.mp4), [Twitter](https://github.com/aidenybai/react-scan/blob/main/.github/assets/twitter.mp4), and [Instagram](https://github.com/aidenybai/react-scan/blob/main/.github/assets/instagram.mp4)).
 
 This often comes down to props that update in reference, like callbacks or object values. For example, the `onClick` function and `style` object are re-created on every render, causing `ExpensiveComponent` to slow down the app:
 
@@ -323,18 +335,18 @@ We expect all contributors to abide by the terms of our [Code of Conduct](https:
 - [x] Don't show label if no reconciliation occurred ("client renders" in DevTools)
 - [x] "global" counter using `sessionStorage`, aggregate count stats instead of immediate replacement
 - [x] Give a general report of the app's performance
-- [ ] checkbox filtering API, leaderboard
-- [ ] Offscreen canvas on worker thread
+- [x] Select areas of the screen to scan
+- [x] Report should include all renders
 - [x] heatmap decay (stacked renders will be more intense)
-- [ ] Investigate components (UI allowlist)
+- [x] Investigate components (UI allowlist)
+- [ ] Offscreen canvas on worker thread
 - [ ] UI for turning on/off options
 - [ ] “PageSpeed insights” for React
+- [ ] CLI
 - [ ] React Native support
+- [ ] Cleanup API reference
 - [ ] Name / explain the actual problem, docs
 - [ ] Simple FPS counter
-- [ ] Drag and select areas of the screen to scan
-- [ ] Long task progress bar filter
-- [x] Report should include all renders
 - [ ] [Runtime version guarding](https://github.com/lahmatiy/react-render-tracker/blob/229ad0e9c28853615300724d5dc86c140f250f60/src/publisher/react-integration/utils/getInternalReactConstants.ts#L28)
 - [ ] React as peer dependency (lock version to range)
 - [ ] Add a funny mascot, like the ["Stop I'm Changing" dude](https://www.youtube.com/shorts/FwOZdX7bDKI?app=desktop)

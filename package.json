@@ -1,6 +1,6 @@
 {
   "name": "react-scan",
-  "version": "0.0.29",
+  "version": "0.0.33",
   "description": "Scan your React app for renders",
   "keywords": [
     "react",
@@ -9,7 +9,7 @@
     "render",
     "performance"
   ],
-  "homepage": "https://github.com/aidenybai/react-scan#readme",
+  "homepage": "https://react-scan.million.dev",
   "bugs": {
     "url": "https://github.com/aidenybai/react-scan/issues"
   },

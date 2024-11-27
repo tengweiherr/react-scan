@@ -1,4 +1,4 @@
-import './core/instrumentation/placeholder';
+import './core/instrumentation/init';
 import { scan } from './index';
 
 if (typeof window !== 'undefined') {
