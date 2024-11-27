@@ -13,11 +13,22 @@ export const withReactScanTreeShake = ({ ...config }: any) => {
 
       const transformerPath = path.join(__dirname, './transformer.js');
       config.plugins.push(transformerPath);
+
+      if (!config.presets) {
+        config.preset = [];
+      }
+
+      const hasBabelPresetExp = config.presets.some(
+        (preset) => preset === 'babel-preset-expo',
+      );
+      if (!hasBabelPresetExp) {
+        config.preset.push('babel-preset-expo');
+      }
     }
 
     return {
       ...config,
-      presets: [...(config.presets ?? []), 'babel-preset-expo'],
+      presets: config.presets ?? [],
       plugins: config.plugins,
     };
   };
