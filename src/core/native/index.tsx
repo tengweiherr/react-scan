@@ -65,10 +65,21 @@ const OptionsContext = createContext<
 
 export const ReactScan = ({
   children,
-  ...options
+  options = {
+    alwaysShowLabels: false,
+    animationWhenFlashing: false,
+    enabled: true,
+    log: false,
+    maxRenders: 20,
+    renderCountThreshold: 0,
+    report: false,
+    resetCountTimeout: 5000,
+    showToolbar: true,
+  },
 }: {
   children: React.ReactNode;
-} & ReactNativeScanOptions) => {
+  options?: ReactNativeScanOptions;
+}) => {
   useEffect(() => {
     ReactScanInternals.options = options;
     instrumentNative();
@@ -97,7 +108,7 @@ export const ReactScan = ({
       <OptionsContext.Provider
         value={{
           ...options,
-          animationWhenFlashing: options.animationWhenFlashing ?? false,
+          animationWhenFlashing: false,
         }}
       >
         {!isPaused && <ReactScanCanvas scanTag="react-scan-no-traverse" />}

@@ -162,6 +162,9 @@
     "@shopify/react-native-skia": {
       "optional": true
     },
+    "babel-preset-expo": {
+      "optional": true
+    },
     "metro-react-native-babel-preset": {
       "optional": true
     },
