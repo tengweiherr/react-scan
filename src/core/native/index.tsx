@@ -76,7 +76,7 @@ const defaultOptions = {
 };
 export const ReactScan = ({
   children,
-  options,
+  options = defaultOptions,
 }: {
   children: React.ReactNode;
   options?: ReactNativeScanOptions;
