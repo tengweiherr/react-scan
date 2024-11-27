@@ -6,7 +6,6 @@ import { getNearestHostFiber } from '../instrumentation/fiber';
 import { getCopiedActiveOutlines, getLabelText } from '../utils';
 
 import { genId, PendingOutline } from '../web/outline';
-import { nanoid } from 'nanoid';
 
 const measurementCache = new WeakMap<
   Fiber,
@@ -145,7 +144,7 @@ const updateOutlines = async (fiber: Fiber, render: Render) => {
       };
       ReactScanInternals.activeOutlines.push({
         outline: newOutline,
-        id: nanoid(),
+        id:genId(),
         resolve: () => {
           /* noop in native since we aren't "painting" lines like web does with canvas*/
         },

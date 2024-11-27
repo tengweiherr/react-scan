@@ -47,13 +47,19 @@ interface Options {
   animationWhenFlashing?: 'fade-out' | false;
 }
 
-export type ReactNativeScanOptions =Options &
+export type ReactNativeScanOptions = Options &
   Omit<
     typeof ReactScanInternals.options,
-    'playSound' | 'runInProduction' | 'includeChildren' | "onPaintFinish" | "onPaintStart"
+    | 'playSound'
+    | 'runInProduction'
+    | 'includeChildren'
+    | 'onPaintFinish'
+    | 'onPaintStart'
   >;
 
-const OptionsContext = createContext<ReactNativeScanOptions & Required<Options>>({
+const OptionsContext = createContext<
+  ReactNativeScanOptions & Required<Options>
+>({
   animationWhenFlashing: false,
 });
 
@@ -88,10 +94,12 @@ export const ReactScan = ({
   return (
     <>
       {children}
-      <OptionsContext.Provider value={{
-        ...options,
-        animationWhenFlashing: options.animationWhenFlashing ?? false
-      }}>
+      <OptionsContext.Provider
+        value={{
+          ...options,
+          animationWhenFlashing: options.animationWhenFlashing ?? false,
+        }}
+      >
         {!isPaused && <ReactScanCanvas scanTag="react-scan-no-traverse" />}
         {options.showToolbar && (
           <ReactScanToolbar

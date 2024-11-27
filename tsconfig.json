@@ -6,7 +6,6 @@
     "jsx": "react",
     "allowJs": true,
     "esModuleInterop": true,
-    "strict": true,
     "module": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],  
     "target": "ESNext"  ,

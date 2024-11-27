@@ -1,1 +1,1 @@
-export * from './dist/core/index.js';
+export * from './dist/core/native/plugins/babel.js';

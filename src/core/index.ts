@@ -263,8 +263,8 @@ export const ReactScanInternals = createStore<Internals>({
   },
   isInIframe: typeof window !== 'undefined' && window.self !== window.top,
   isPaused:
-    typeof window === 'undefined'
-      ? true
+    typeof localStorage === 'undefined'
+      ? false // react native
       : tryParse(localStorage.getItem('react-scan-paused') ?? 'false'),
   componentAllowList: null,
   options: {

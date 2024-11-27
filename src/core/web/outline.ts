@@ -4,7 +4,6 @@ import type { Render } from '../instrumentation/index';
 import { type Measurement, ReactScanInternals } from '../index';
 import { getLabelText } from '../utils';
 import { isOutlineUnstable, throttle } from './utils';
-import { nanoid } from 'nanoid';
 
 //todo make more unique
 export const genId = () => {
@@ -406,7 +405,7 @@ async function paintOutlines(
         resolve,
         text: getLabelText(renders, 'dom'),
         updatedAt: performance.now(),
-        id: nanoid(),
+        id: genId(),
       };
     });
 

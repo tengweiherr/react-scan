@@ -7,27 +7,38 @@ const commonConfig = {
   target: 'esnext' as const,
   treeshake: true,
   dts: true,
-  minify: process.env.NODE_ENV === 'production' ? ('terser' as const) : false,
+  minify: false,
   env: {
     NODE_ENV: process.env.NODE_ENV ?? 'development',
+  },
+  esbuildOptions: (options) => {
+    options.external = [
+      'react-native',
+      '@shopify/react-native-skia',
+      'react-native-reanimated',
+      '@react-native/metro-config',
+    ];
   },
 };
 
 export default defineConfig([
   // Web build
   {
-    ...commonConfig,
     entry: ['./src/index.ts', './src/auto.ts', './src/rsc-shim.ts'],
+    outDir: './dist',
+    splitting: false,
+    sourcemap: false,
     format: ['cjs', 'esm', 'iife'],
+    target: 'esnext',
     platform: 'browser',
-    external: ['react', 'react-dom', 'react-reconciler'],
-    outExtension({ format }) {
-      return {
-        js: `.${format === 'esm' ? 'mjs' : 'js'}`,
-      };
+    treeshake: true,
+    dts: true,
+    minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
+    env: {
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
+    external: ['react', 'react-dom', 'react-reconciler'],
   },
-
   // CLI build
   {
     ...commonConfig,
@@ -39,11 +50,7 @@ export default defineConfig([
   // Native build
   {
     ...commonConfig,
-    entry: [
-      './src/native.ts',
-      './src/core/native/index.ts',
-      './src/core/native/plugins/metro.ts',
-    ],
+    entry: ['./src/native.ts', './src/core/native/index.ts'],
     format: ['cjs'],
     platform: 'node',
     external: [
@@ -52,10 +59,20 @@ export default defineConfig([
       '@shopify/react-native-skia',
       'react-native-reanimated',
     ],
+    target: 'esnext',
     outExtension() {
       return {
         js: '.js',
       };
     },
+  },
+  // Plugins
+  {
+    entry: [
+      './src/core/native/plugins/babel.ts',
+      './src/core/native/plugins/transformer.ts',
+    ],
+    format: ['cjs'],
+    platform: 'node',
   },
 ]);
