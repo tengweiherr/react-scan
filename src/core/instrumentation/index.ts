@@ -170,21 +170,24 @@ export const reportRender = (
     type: getType(fiber.type) || fiber.type,
   };
 };
-export const reportRenderFiber = (fiber: Fiber, renders: (Render | null)[]) => {
-  const [reportFiber, report] = (() => {
-    const currentFiberData = ReactScanInternals.reportDataByFiber.get(fiber);
-    if (currentFiberData) {
-      return [fiber, currentFiberData] as const;
-    }
-    if (!fiber.alternate) {
-      return [fiber, null] as const; // use the current fiber as a key
-    }
 
-    const alternateFiberData = ReactScanInternals.reportDataByFiber.get(
-      fiber.alternate,
-    );
-    return [fiber.alternate, alternateFiberData] as const;
-  })();
+function createReportFiber(fiber: Fiber) {
+  const currentFiberData = ReactScanInternals.reportDataByFiber.get(fiber);
+  if (currentFiberData) {
+    return [fiber, currentFiberData] as const;
+  }
+  if (!fiber.alternate) {
+    return [fiber, null] as const; // use the current fiber as a key
+  }
+
+  const alternateFiberData = ReactScanInternals.reportDataByFiber.get(
+    fiber.alternate,
+  );
+  return [fiber.alternate, alternateFiberData] as const;
+}
+
+export const reportRenderFiber = (fiber: Fiber, renders: (Render | null)[]) => {
+  const [reportFiber, report] = createReportFiber(fiber);
 
   if (report) {
     for (let i = 0, len = renders.length; i < len; i++) {
@@ -215,16 +218,12 @@ export const reportRenderFiber = (fiber: Fiber, renders: (Render | null)[]) => {
   );
 };
 
-export const instrument = ({
-  onCommitStart,
-  onRender,
-  onCommitFinish,
-}: {
-  onCommitStart: () => void;
-  onRender: (fiber: Fiber, render: Render) => void;
-  onCommitFinish: () => void;
-}) => {
-  const handleCommitFiberRoot = (_rendererID: number, root: FiberRoot) => {
+class CommitFiberRootHandler {
+  constructor(public options: InstrumentOptions) {
+
+  }
+
+  handle(_rendererID: number, root: FiberRoot) {
     if (
       (ReactScanInternals.isPaused &&
         ReactScanInternals.inspectState.kind === 'inspect-off') ||
@@ -232,86 +231,7 @@ export const instrument = ({
     ) {
       return;
     }
-    onCommitStart();
-    const recordRender = (fiber: Fiber) => {
-      const type = getType(fiber.type);
-      if (!type) return null;
-      if (!didFiberRender(fiber)) return null;
-
-      const propsRender = getPropsRender(fiber, type);
-      const contextRender = getContextRender(fiber, type);
-
-      let trigger = false;
-      if (fiber.alternate) {
-        const didStateChange = traverseState(fiber, (prevState, nextState) => {
-          return !Object.is(prevState.memoizedState, nextState.memoizedState);
-        });
-        if (didStateChange) {
-          trigger = true;
-        }
-      }
-      const name = getDisplayName(type);
-      if (name === 'Million(Profiler)') return;
-      if (name) {
-        reportRender(name, fiber, [propsRender, contextRender]); // back compat
-      }
-
-      if (
-        isCompositeComponent(fiber) // since we key on the fiber we don't need a display name (ex. memo compoenents are anonymous and dont have names)
-      ) {
-        reportRenderFiber(fiber, [propsRender, contextRender]);
-      }
-
-      if (!propsRender && !contextRender) return null;
-
-      const allowList = ReactScanInternals.componentAllowList;
-      const shouldAllow =
-        allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
-
-      if (shouldAllow) {
-        const parent = traverseFiber(
-          fiber,
-          (node) => {
-            const options =
-              allowList?.get(node.type) ?? allowList?.get(node.elementType);
-            return options?.includeChildren;
-          },
-          true,
-        );
-        if (!parent && !shouldAllow) return null;
-      }
-
-      if (propsRender) {
-        propsRender.trigger = trigger;
-        onRender(fiber, propsRender);
-      }
-      if (contextRender) {
-        contextRender.trigger = trigger;
-        onRender(fiber, contextRender);
-      }
-      if (trigger) {
-        onRender(fiber, {
-          type: 'state',
-          count: 1,
-          trigger,
-          changes: [],
-          name: getDisplayName(type),
-          time: getSelfTime(fiber),
-          forget: hasMemoCache(fiber),
-        });
-      }
-      if (!propsRender && !contextRender && !trigger) {
-        onRender(fiber, {
-          type: 'misc',
-          count: 1,
-          trigger,
-          changes: [],
-          name: getDisplayName(type),
-          time: getSelfTime(fiber),
-          forget: hasMemoCache(fiber),
-        });
-      }
-    };
+    this.options.onCommitStart();
 
     const rootFiber = root.current;
     const wasMounted =
@@ -321,56 +241,146 @@ export const instrument = ({
       rootFiber.alternate.memoizedState.isDehydrated !== true;
     const isMounted = Boolean(rootFiber.memoizedState?.element);
 
-    const mountFiber = (firstChild: Fiber, traverseSiblings: boolean) => {
-      let fiber: Fiber | null = firstChild;
-
-      // eslint-disable-next-line eqeqeq
-      while (fiber != null) {
-        const shouldIncludeInTree = !shouldFilterFiber(fiber);
-        if (shouldIncludeInTree) {
-          recordRender(fiber);
-        }
-
-        // eslint-disable-next-line eqeqeq
-        if (fiber.child != null) {
-          mountFiber(fiber.child, true);
-        }
-        fiber = traverseSiblings ? fiber.sibling : null;
-      }
-    };
-
-    const updateFiber = (nextFiber: Fiber, prevFiber: Fiber) => {
-      if (!prevFiber) return;
-
-      const shouldIncludeInTree = !shouldFilterFiber(nextFiber);
-      if (shouldIncludeInTree) {
-        recordRender(nextFiber);
-      }
-
-      if (nextFiber.child !== prevFiber.child) {
-        let nextChild = nextFiber.child;
-
-        while (nextChild) {
-          const prevChild = nextChild.alternate;
-          if (prevChild) {
-            updateFiber(nextChild, prevChild);
-          } else {
-            mountFiber(nextChild, false);
-          }
-
-          nextChild = nextChild.sibling;
-        }
-      }
-    };
-
     if (!wasMounted && isMounted) {
-      mountFiber(rootFiber, false);
+      this.mountFiber(rootFiber, false);
     } else if (wasMounted && isMounted) {
-      updateFiber(rootFiber, rootFiber.alternate);
+      this.updateFiber(rootFiber, rootFiber.alternate);
     }
 
-    onCommitFinish();
+    this.options.onCommitFinish();
+  }
+
+  recordRender(fiber: Fiber) {
+    const type = getType(fiber.type);
+    if (!type) return null;
+    if (!didFiberRender(fiber)) return null;
+
+    const propsRender = getPropsRender(fiber, type);
+    const contextRender = getContextRender(fiber, type);
+
+    let trigger = false;
+    if (fiber.alternate) {
+      const didStateChange = traverseState(fiber, (prevState, nextState) => {
+        return !Object.is(prevState.memoizedState, nextState.memoizedState);
+      });
+      if (didStateChange) {
+        trigger = true;
+      }
+    }
+    const name = getDisplayName(type);
+    if (name === 'Million(Profiler)') return;
+    if (name) {
+      reportRender(name, fiber, [propsRender, contextRender]); // back compat
+    }
+
+    if (
+      isCompositeComponent(fiber) // since we key on the fiber we don't need a display name (ex. memo compoenents are anonymous and dont have names)
+    ) {
+      reportRenderFiber(fiber, [propsRender, contextRender]);
+    }
+
+    if (!propsRender && !contextRender) return null;
+
+    const allowList = ReactScanInternals.componentAllowList;
+    const shouldAllow =
+      allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
+
+    if (shouldAllow) {
+      const parent = traverseFiber(
+        fiber,
+        (node) => {
+          const options =
+            allowList?.get(node.type) ?? allowList?.get(node.elementType);
+          return options?.includeChildren;
+        },
+        true,
+      );
+      if (!parent && !shouldAllow) return null;
+    }
+
+    if (propsRender) {
+      propsRender.trigger = trigger;
+      this.options.onRender(fiber, propsRender);
+    }
+    if (contextRender) {
+      contextRender.trigger = trigger;
+      this.options.onRender(fiber, contextRender);
+    }
+    if (trigger) {
+      this.options.onRender(fiber, {
+        type: 'state',
+        count: 1,
+        trigger,
+        changes: [],
+        name: getDisplayName(type),
+        time: getSelfTime(fiber),
+        forget: hasMemoCache(fiber),
+      });
+    }
+    if (!propsRender && !contextRender && !trigger) {
+      this.options.onRender(fiber, {
+        type: 'misc',
+        count: 1,
+        trigger,
+        changes: [],
+        name: getDisplayName(type),
+        time: getSelfTime(fiber),
+        forget: hasMemoCache(fiber),
+      });
+    }
   };
+
+  mountFiber(firstChild: Fiber, traverseSiblings: boolean) {
+    let fiber: Fiber | null = firstChild;
+
+    // eslint-disable-next-line eqeqeq
+    while (fiber != null) {
+      const shouldIncludeInTree = !shouldFilterFiber(fiber);
+      if (shouldIncludeInTree) {
+        this.recordRender(fiber);
+      }
+
+      // eslint-disable-next-line eqeqeq
+      if (fiber.child != null) {
+        this.mountFiber(fiber.child, true);
+      }
+      fiber = traverseSiblings ? fiber.sibling : null;
+    }
+  }
+
+  updateFiber(nextFiber: Fiber, prevFiber: Fiber) {
+    if (!prevFiber) return;
+
+    const shouldIncludeInTree = !shouldFilterFiber(nextFiber);
+    if (shouldIncludeInTree) {
+      this.recordRender(nextFiber);
+    }
+
+    if (nextFiber.child !== prevFiber.child) {
+      let nextChild = nextFiber.child;
+
+      while (nextChild) {
+        const prevChild = nextChild.alternate;
+        if (prevChild) {
+          this.updateFiber(nextChild, prevChild);
+        } else {
+          this.mountFiber(nextChild, false);
+        }
+
+        nextChild = nextChild.sibling;
+      }
+    }
+  };
+}
+
+interface InstrumentOptions {
+  onCommitStart: () => void;
+  onRender: (fiber: Fiber, render: Render) => void;
+  onCommitFinish: () => void;
+}
+
+export const instrument = (options: InstrumentOptions) => {
+  const handler = new CommitFiberRootHandler(options);
 
   ReactScanInternals.onCommitFiberRoot = (
     rendererID: number,
@@ -381,7 +391,7 @@ export const instrument = ({
     }
 
     try {
-      handleCommitFiberRoot(rendererID, root);
+      handler.handle(rendererID, root);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[React Scan] Error instrumenting: ', err);
