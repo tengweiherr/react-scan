@@ -1,6 +1,7 @@
 import path from 'path';
 
 export const withReactScanTreeShake = ({ ...config }: any) => {
+  config = config ?? {}
   return function (api: { cache: (_: boolean) => void }) {
     api.cache(true);
 

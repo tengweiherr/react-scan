@@ -18,6 +18,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -82,22 +83,18 @@ export const ReactScan = ({
   children: React.ReactNode;
   options?: ReactNativeScanOptions;
 }) => {
-  const withDefaultOptions = {
-    ...defaultOptions,
-    ...options,
-  };
+  const withDefaultOptions = useMemo(
+    () => ({ ...defaultOptions, ...options }),
+    [options],
+  );
 
   // todo: get rid of this sync, model internals as taking in context object (potentially)
+  // todo: replace isPaused with options .enabled
   useEffect(() => {
-    ReactScanInternals.options = options;
+    ReactScanInternals.options = withDefaultOptions;
+    ReactScanInternals.isPaused = !withDefaultOptions.enabled
     instrumentNative();
-  }, []);
-
-  useEffect(() => {
-    if (!withDefaultOptions.enabled) {
-      ReactScanInternals.isPaused = true;
-    }
-  }, [withDefaultOptions.enabled]);
+  }, [withDefaultOptions]);
   const isPaused = useIsPaused();
 
   useEffect(() => {
