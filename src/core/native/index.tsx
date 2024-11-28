@@ -86,10 +86,18 @@ export const ReactScan = ({
     ...defaultOptions,
     ...options,
   };
+
+  // todo: get rid of this sync, model internals as taking in context object (potentially)
   useEffect(() => {
     ReactScanInternals.options = options;
     instrumentNative();
   }, []);
+
+  useEffect(() => {
+    if (!withDefaultOptions.enabled) {
+      ReactScanInternals.isPaused = true;
+    }
+  }, [withDefaultOptions.enabled]);
   const isPaused = useIsPaused();
 
   useEffect(() => {
@@ -107,6 +115,10 @@ export const ReactScan = ({
       clearInterval(interval);
     };
   }, [isPaused]);
+
+  if (!withDefaultOptions.enabled) {
+    return children;
+  }
 
   return (
     <>
