@@ -76,13 +76,21 @@ const defaultOptions = {
   resetCountTimeout: 5000,
   showToolbar: true,
 };
-export const ReactScan = ({
-  children,
-  options = defaultOptions,
-}: {
+type ReactScanProps = {
   children: React.ReactNode;
   options?: ReactNativeScanOptions;
-}) => {
+};
+
+export const ReactScan = (props: ReactScanProps) => {
+  if (process.env.NODE_ENV === 'production') {
+    return props.children;
+  }
+  return <ReactScanEntry {...props} />;
+};
+const ReactScanEntry = ({
+  children,
+  options = defaultOptions,
+}: ReactScanProps) => {
   const withDefaultOptions = useMemo(
     () => ({ ...defaultOptions, ...options }),
     [options],
@@ -92,7 +100,7 @@ export const ReactScan = ({
   // todo: replace isPaused with options .enabled
   useEffect(() => {
     ReactScanInternals.options = withDefaultOptions;
-    ReactScanInternals.isPaused = !withDefaultOptions.enabled
+    ReactScanInternals.isPaused = !withDefaultOptions.enabled;
     instrumentNative();
   }, [withDefaultOptions]);
   const isPaused = useIsPaused();
