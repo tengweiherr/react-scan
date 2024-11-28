@@ -13,24 +13,22 @@ export const withReactScanTreeShake = ({ ...config }: any) => {
 
       const transformerPath = path.join(__dirname, './transformer.js');
       config.plugins.push(transformerPath);
-
-      if (!config.presets) {
-        config.preset = [];
-      }
-
-      const hasBabelPresetExp = config.presets.some(
-        (preset) =>
-          preset === 'babel-preset-expo' ||
-          (Array.isArray(preset) && preset.at(0) === 'babel-preset-expo'),
-      );
-      if (!hasBabelPresetExp) {
-        config.preset.push('babel-preset-expo');
-      }
+    }
+    if (!config.presets) {
+      config.presets = [];
     }
 
+    const hasBabelPresetExp = config.presets.some(
+      (preset) =>
+        preset === 'babel-preset-expo' ||
+        (Array.isArray(preset) && preset.at(0) === 'babel-preset-expo'),
+    );
+    if (!hasBabelPresetExp) {
+      config.presets.push('babel-preset-expo');
+    }
     return {
       ...config,
-      presets: config.presets ?? [],
+      presets: config.presets,
       plugins: config.plugins,
     };
   };
