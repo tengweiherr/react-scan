@@ -93,7 +93,19 @@ const ReactScanEntry = ({
 }: ReactScanProps) => {
   const withDefaultOptions = useMemo(
     () => ({ ...defaultOptions, ...options }),
-    [options],
+    [
+      options.alwaysShowLabels,
+      options.animationWhenFlashing,
+      options.enabled,
+      options.log,
+      options.maxRenders,
+      options.report,
+      options.resetCountTimeout,
+      options.showToolbar,
+      options.onCommitFinish,
+      options.onCommitStart,
+      options.onRender,
+    ],
   );
 
   // todo: get rid of this sync, model internals as taking in context object (potentially)
