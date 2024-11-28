@@ -82,7 +82,7 @@ type ReactScanProps = {
 };
 
 export const ReactScan = (props: ReactScanProps) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' || !__DEV__) {
     return props.children;
   }
   return <ReactScanEntry {...props} />;

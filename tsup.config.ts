@@ -8,9 +8,7 @@ const commonConfig = {
   treeshake: true,
   dts: true,
   minify: false,
-  env: {
-    NODE_ENV: process.env.NODE_ENV ?? 'development',
-  },
+
   esbuildOptions: (options) => {
     options.external = [
       'react-native',
@@ -45,6 +43,9 @@ export default defineConfig([
     entry: ['./src/cli.mts'],
     format: ['cjs'],
     platform: 'node',
+    env: {
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
+    },
   },
 
   // Native build
