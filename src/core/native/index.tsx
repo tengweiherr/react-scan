@@ -100,9 +100,14 @@ const ReactScanEntry = ({
   // todo: replace isPaused with options .enabled
   useEffect(() => {
     ReactScanInternals.options = withDefaultOptions;
-    ReactScanInternals.isPaused = !withDefaultOptions.enabled;
     instrumentNative();
   }, [withDefaultOptions]);
+
+  // explicitly only sync enabled when the enabled option chnages
+  useEffect(() => {
+    ReactScanInternals.isPaused = !withDefaultOptions.enabled;
+  }, [withDefaultOptions.enabled]);
+
   const isPaused = useIsPaused();
 
   useEffect(() => {
