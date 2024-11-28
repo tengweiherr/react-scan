@@ -19,7 +19,9 @@ export const withReactScanTreeShake = ({ ...config }: any) => {
       }
 
       const hasBabelPresetExp = config.presets.some(
-        (preset) => preset === 'babel-preset-expo',
+        (preset) =>
+          preset === 'babel-preset-expo' ||
+          (Array.isArray(preset) && preset.at(0) === 'babel-preset-expo'),
       );
       if (!hasBabelPresetExp) {
         config.preset.push('babel-preset-expo');
