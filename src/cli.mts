@@ -120,6 +120,7 @@ const init = async () => {
     userAgent:
       userAgentStrings[Math.floor(Math.random() * userAgentStrings.length)],
     bypassCSP: true,
+    ignoreHTTPSErrors: true,
   };
 
   try {
@@ -241,7 +242,8 @@ const init = async () => {
   let currentSpinner: ReturnType<typeof spinner> | undefined;
   let currentURL = urlString;
 
-  let interval: NodeJS.Timeout | undefined;
+  let interval: NodeJS.Timer | undefined;
+
   const inject = async (url: string) => {
     if (interval) clearInterval(interval);
     currentURL = url;
@@ -250,23 +252,29 @@ const init = async () => {
     currentSpinner = spinner();
     currentSpinner.start(dim(`Scanning: ${truncatedURL}`));
     count = 0;
+
     try {
       await page.waitForLoadState('load');
       await page.waitForTimeout(500);
+
       const hasReactScan = await page.evaluate(() => {
         return Boolean(globalThis.__REACT_SCAN__);
       });
+
       if (!hasReactScan) {
         await page.addScriptTag({
           content: scriptContent,
         });
       }
+
       await page.waitForTimeout(100);
+
       await page.evaluate(() => {
         if (typeof globalThis.reactScan !== 'function') return;
         globalThis.reactScan({ report: true });
         globalThis.__REACT_SCAN__.ReactScanInternals.reportData = {};
       });
+
       interval = setInterval(() => {
         pollReport().catch(() => {});
       }, 1000);

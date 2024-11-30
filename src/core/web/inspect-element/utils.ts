@@ -277,26 +277,38 @@ export const isCompositeComponent = (fiber: Fiber) => {
   );
 };
 
-export const getOverrideProps = () => {
+export const getOverrideMethods = () => {
   let overrideProps = null;
+  let overrideHookState = null;
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
-    if (!renderers) return null;
-    for (const [_, renderer] of Array.from(renderers)) {
-      try {
-        if (overrideProps) {
-          const prevOverrideProps = overrideProps;
-          overrideProps = (fiber: Fiber, key: string, value: any) => {
-            prevOverrideProps(fiber, key, value);
-            renderer.overrideProps(fiber, key, value);
-          };
-        } else {
-          overrideProps = renderer.overrideProps;
+    if (renderers) {
+      for (const [_, renderer] of Array.from(renderers)) {
+        try {
+          if (overrideProps) {
+            const prevOverrideProps = overrideProps;
+            overrideProps = (fiber: Fiber, key: string, value: any) => {
+              prevOverrideProps(fiber, key, value);
+              renderer.overrideProps(fiber, key, value);
+            };
+          } else {
+            overrideProps = renderer.overrideProps;
+          }
+
+          if (overrideHookState) {
+            const prevOverrideHookState = overrideHookState;
+            overrideHookState = (fiber: Fiber, key: string, value: any) => {
+              prevOverrideHookState(fiber, key, value);
+              renderer.overrideHookState(fiber, key, value);
+            };
+          } else {
+            overrideHookState = renderer.overrideHookState;
+          }
+        } catch (e) {
+          /**/
         }
-      } catch (e) {
-        /**/
       }
     }
   }
-  return overrideProps;
+  return { overrideProps, overrideHookState };
 };

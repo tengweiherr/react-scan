@@ -116,8 +116,8 @@ importers:
         specifier: 19.0.0-rc.1
         version: 19.0.0-rc.1(react@19.0.0-rc.1)
       react-scan:
-        specifier: ^0.0.29
-        version: 0.0.29
+        specifier: ^0.0.34
+        version: 0.0.34
       sugar-high:
         specifier: ^0.7.5
         version: 0.7.5
@@ -2706,8 +2706,8 @@ packages:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
     engines: {node: '>=0.10.0'}
 
-  react-scan@0.0.29:
-    resolution: {integrity: sha512-+I7ZFn1BbWNANBWq1HgNgJAE01j542xF56434Qv3UGE6L2a4vNsb5bdvUr1eQPmfAqtA/3p9bywwPzojg08pGQ==}
+  react-scan@0.0.34:
+    resolution: {integrity: sha512-sB1h7z0Y3sufhcTg6XNmIu4Wq2pQRK2Jk7/1NDPzxVKzFFcRwpjDqtiZP1C/8V8xPPQIiAaGsP6QNNVsQ3VLbg==}
     hasBin: true
 
   react@18.2.0:
@@ -6014,7 +6014,7 @@ snapshots:
 
   react-refresh@0.14.2: {}
 
-  react-scan@0.0.29:
+  react-scan@0.0.34:
     dependencies:
       '@clack/core': 0.3.5
       '@clack/prompts': 0.8.2

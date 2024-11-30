@@ -27,6 +27,8 @@ Trusted by engineering teams at:
 
 ## Install
 
+> Looking for [React Native](https://github.com/aidenybai/react-scan/pull/23)?
+
 The fastest way to get started is via CLI. This will spin up an isolated browser instance which you can interact or use React Scan with.
 
 ```bash

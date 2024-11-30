@@ -138,7 +138,7 @@ export const createToolbar = (): (() => void) => {
           justify-content: space-evenly;
         ">
           <div style="display: flex; gap: 8px; align-items: center;">
-          <button id="react-scan-previous-focus" style="
+            <button id="react-scan-previous-focus" style="
               padding: 4px 10px;
               display: flex;
               align-items: center;
@@ -149,7 +149,7 @@ export const createToolbar = (): (() => void) => {
               transition: all ${TRANSITION_MS} ease;
               height: 26px;
               outline: none;
-               border: none;
+              border: none;
               font-size: 12px;
               white-space: nowrap;
             ">${PREVIOUS_SVG}</button>
@@ -164,13 +164,12 @@ export const createToolbar = (): (() => void) => {
               transition: all ${TRANSITION_MS} ease;
               height: 26px;
               outline: none;
-               border: none;
+              border: none;
               font-size: 12px;
               white-space: nowrap;
-               font-family: ${MONO_FONT};
             ">${NEXT_SVG}</button>
+            <span style="font-size: 14px; font-weight: 500;">react-scan</span>
           </div>
-           <span style="font-size: 14px; font-weight: 500;">react-scan</span>
         </div>
       </div>
       <div id="react-scan-props" style="
@@ -192,7 +191,7 @@ export const createToolbar = (): (() => void) => {
         bottom: 0;
         width: 4px;
         cursor: ew-resize;
-        dis
+        display: none;
       "></div>
     </div>
   </div>
@@ -218,7 +217,38 @@ export const createToolbar = (): (() => void) => {
     display: flex;
     gap: 8px;
     align-items: center;
+    justify-content: space-between;
     background: #000;
+  }
+
+  .react-scan-header-left {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .react-scan-header-right {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .react-scan-replay-button {
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    transition: all ${TRANSITION_MS} ease;
+    outline: none;
+  }
+
+  .react-scan-replay-button:hover {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .react-scan-component-name {
@@ -687,22 +717,28 @@ export const createToolbar = (): (() => void) => {
     const { focusedDomElement } = currentState;
     if (!focusedDomElement) return;
 
-    let nextElement = focusedDomElement.firstElementChild as HTMLElement | null;
+    const allElements = document.querySelectorAll('*');
+    const elements = Array.from(allElements).filter((el): el is HTMLElement => {
+      return el instanceof HTMLElement;
+    });
 
-    if (!nextElement) {
-      let current: HTMLElement | null = focusedDomElement;
-      while (current && !nextElement) {
-        nextElement = current.nextElementSibling as HTMLElement | null;
-        current = current.parentElement;
+    const currentIndex = elements.indexOf(focusedDomElement);
+    if (currentIndex === -1) return;
+
+    let nextElement: HTMLElement | null = null;
+    let nextIndex = currentIndex + 1;
+    const prevFiber = getNearestFiberFromElement(focusedDomElement);
+
+    while (nextIndex < elements.length) {
+      const fiber = getNearestFiberFromElement(elements[nextIndex]);
+      if (fiber && fiber !== prevFiber) {
+        nextElement = elements[nextIndex];
+        break;
       }
+      nextIndex++;
     }
 
-    const prevFiber = getNearestFiberFromElement(focusedDomElement);
-    const nextFiber = nextElement
-      ? getNearestFiberFromElement(nextElement)
-      : null;
-
-    if (nextElement && nextFiber !== prevFiber) {
+    if (nextElement) {
       ReactScanInternals.inspectState = {
         kind: 'focused',
         focusedDomElement: nextElement,
@@ -727,26 +763,27 @@ export const createToolbar = (): (() => void) => {
     const { focusedDomElement } = currentState;
     if (!focusedDomElement) return;
 
-    let prevElement: HTMLElement | null = null;
+    const allElements = document.querySelectorAll('*');
+    const elements = Array.from(allElements).filter((el): el is HTMLElement => {
+      return el instanceof HTMLElement;
+    });
+    const currentIndex = elements.indexOf(focusedDomElement);
+    if (currentIndex === -1) return;
 
-    if (focusedDomElement.previousElementSibling) {
-      prevElement = focusedDomElement.previousElementSibling as HTMLElement;
-      while (prevElement.lastElementChild) {
-        prevElement = prevElement.lastElementChild as HTMLElement;
+    let prevElement: HTMLElement | null = null;
+    let prevIndex = currentIndex - 1;
+    const currentFiber = getNearestFiberFromElement(focusedDomElement);
+
+    while (prevIndex >= 0) {
+      const fiber = getNearestFiberFromElement(elements[prevIndex]);
+      if (fiber && fiber !== currentFiber) {
+        prevElement = elements[prevIndex];
+        break;
       }
-    } else if (
-      focusedDomElement.parentElement &&
-      focusedDomElement.parentElement !== document.body
-    ) {
-      prevElement = focusedDomElement.parentElement;
+      prevIndex--;
     }
 
-    const prevFiber = getNearestFiberFromElement(focusedDomElement);
-    const nextFiber = prevElement
-      ? getNearestFiberFromElement(prevElement)
-      : null;
-
-    if (prevElement && prevFiber !== nextFiber) {
+    if (prevElement) {
       ReactScanInternals.inspectState = {
         kind: 'focused',
         focusedDomElement: prevElement,
