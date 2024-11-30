@@ -1,31 +1,83 @@
-import { ReactScanInternals, type Internals } from '../../index';
+import { ReactScanInternals } from '../../index';
 
-const MINIMAP_HEIGHT = 400;
-const MINIMAP_WIDTH = 300;
+const MINIMAP_MAX_HEIGHT = 200;
+const MINIMAP_MIN_HEIGHT = 100;
 const MINIMAP_CANVAS_ID = 'react-scan-minimap-canvas';
 
-const getVisibleBoundsRelativeToContainer = (element: HTMLElement): DOMRect => {
-  // this is wrong, we need a way to arbitrarily calculate the range of visible pixels
-  // given in the viewport or blocked by a scroll container
-  // maybe helpful? https://stackoverflow.com/questions/704758/how-do-i-check-if-an-element-is-really-visible-with-javascript
-  // https://stackoverflow.com/questions/5353934/check-if-element-is-visible-on-screen
-  const elementRect = element.getBoundingClientRect();
-  const viewportRect = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+const toCanvasCoordinates = (
+  rootElement: HTMLElement,
+  scaleX: number,
+  scaleY: number,
+  dpr: number,
+) => {
+  const rootRect = rootElement.getBoundingClientRect();
 
-  const x1 = Math.max(elementRect.left, viewportRect.left);
-  const y1 = Math.max(elementRect.top, viewportRect.top);
-  const x2 = Math.min(elementRect.right, viewportRect.right);
-  const y2 = Math.min(elementRect.bottom, viewportRect.bottom);
+  return (x: number, y: number): [number, number] => {
+    const relativeX = (x - rootRect.left) * scaleX / dpr;
+    const relativeY = (y - rootRect.top) * scaleY / dpr;
+    return [relativeX, relativeY];
+  };
+};
+
+const hasOverflowChildren = (element: HTMLElement, rootElement: HTMLElement): boolean => {
+  const rect = element.getBoundingClientRect();
+  const rootRect = rootElement.getBoundingClientRect();
+
+  return (
+    rect.bottom < rootRect.top ||
+    rect.top > rootRect.bottom ||
+    rect.right < rootRect.left ||
+    rect.left > rootRect.right
+  );
+};
+
+const drawChildren = (
+  element: HTMLElement,
+  ctx: CanvasRenderingContext2D,
+  scaleFn: (x: number, y: number) => [number, number],
+  rootElement: HTMLElement,
+  depth = 100,
+) => {
+  if (depth === 0) return;
+
+  const rect = element.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const [x1, y1] = scaleFn(rect.left, rect.top);
+  const [x2, y2] = scaleFn(rect.right, rect.bottom);
 
   const width = x2 - x1;
   const height = y2 - y1;
 
-  return new DOMRect(x1, y1, width, height);
-};
+  if (width < 0 || height < 0) return;
 
-const hasOverflowChildren = (element: HTMLElement): boolean => {
-  // todo
-  return true;
+  const isOffscreen = hasOverflowChildren(element, rootElement);
+  const activeOutline = ReactScanInternals.activeOutlines.find(
+    (ao) => ao.outline.domNode === element
+  );
+
+  if (activeOutline) {
+    const alpha = activeOutline.alpha;
+    ctx.strokeStyle = `rgba(147, 112, 219, ${alpha})`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x1, y1, width, height);
+  } else {
+    // Only draw if there are active outlines somewhere
+    if (ReactScanInternals.activeOutlines.length > 0) {
+      ctx.strokeStyle = isOffscreen ? 'rgba(128, 128, 128, 0.3)' : 'rgba(147, 112, 219, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x1, y1, width, height);
+    }
+  }
+
+  // Draw children
+  const children = Array.from(element.children) as HTMLElement[];
+  for (const child of children) {
+    const style = window.getComputedStyle(child);
+    if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+      drawChildren(child, ctx, scaleFn, rootElement, depth - 1);
+    }
+  }
 };
 
 const drawMinimapInsideViewportWindow = (
@@ -34,21 +86,47 @@ const drawMinimapInsideViewportWindow = (
     topLeft: [number, number];
     bottomRight: [number, number];
     scaleFn: (x: number, y: number) => [number, number];
+    dpr: number;
   },
-  element: HTMLElement,
+  rootElement: HTMLElement,
 ) => {
-  const visibleBounds = getVisibleBoundsRelativeToContainer(element);
+  ctx.save();
+  ctx.scale(minimap.dpr, minimap.dpr);
 
-  // a little ugly, but from world, to canvas
-  const [x1, y1] = minimap.scaleFn(visibleBounds.left, visibleBounds.top);
-  const [x2, y2] = minimap.scaleFn(visibleBounds.right, visibleBounds.bottom);
+  const rootRect = rootElement.getBoundingClientRect();
+  const viewportRect = {
+    left: window.scrollX,
+    top: window.scrollY,
+    right: window.scrollX + window.innerWidth,
+    bottom: window.scrollY + window.innerHeight
+  };
+
+  // Convert viewport coordinates to be relative to the root element
+  const relativeViewport = {
+    left: (viewportRect.left - rootRect.left) / rootRect.width,
+    top: (viewportRect.top - rootRect.top) / rootRect.height,
+    right: (viewportRect.right - rootRect.left) / rootRect.width,
+    bottom: (viewportRect.bottom - rootRect.top) / rootRect.height
+  };
+
+  // Get canvas dimensions
+  const canvasWidth = ctx.canvas.width / minimap.dpr;
+  const canvasHeight = ctx.canvas.height / minimap.dpr;
+
+  // Calculate viewport position in canvas coordinates
+  const x1 = relativeViewport.left * canvasWidth;
+  const y1 = relativeViewport.top * canvasHeight;
+  const x2 = relativeViewport.right * canvasWidth;
+  const y2 = relativeViewport.bottom * canvasHeight;
 
   const width = x2 - x1;
   const height = y2 - y1;
 
-  ctx.strokeStyle = 'red';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 1;
   ctx.strokeRect(x1, y1, width, height);
+
+  ctx.restore();
 };
 
 const drawMinimap = (
@@ -57,38 +135,61 @@ const drawMinimap = (
     topLeft: [number, number];
     bottomRight: [number, number];
     scaleFn: (x: number, y: number) => [number, number];
+    dpr: number;
   },
-  element: HTMLElement,
+  rootElement: HTMLElement,
 ) => {
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.save();
+  ctx.scale(minimap.dpr, minimap.dpr);
+  ctx.clearRect(0, 0, ctx.canvas.width / minimap.dpr, ctx.canvas.height / minimap.dpr);
 
-  drawChildren(element, 20, ctx, minimap.scaleFn);
+  // Draw root element first
+  drawChildren(rootElement, ctx, minimap.scaleFn, rootElement, 100);
+
+  // Draw scheduled outlines
+  ReactScanInternals.scheduledOutlines.forEach((outline) => {
+    const element = outline.domNode;
+    if (element !== rootElement) {
+      drawChildren(element, ctx, minimap.scaleFn, rootElement, 100);
+    }
+  });
+
+  // Draw active outlines
+  ReactScanInternals.activeOutlines.forEach((activeOutline) => {
+    const element = activeOutline.outline.domNode;
+    if (element !== rootElement) {
+      drawChildren(element, ctx, minimap.scaleFn, rootElement, 100);
+    }
+  });
+
+  ctx.restore();
 };
 
-const drawChildren = (
-  element: HTMLElement,
-  depth = 20,
-  ctx: CanvasRenderingContext2D,
-  scaleFn: (x: number, y: number) => [number, number],
-) => {
-  if (depth === 0) return;
+const resizeCanvas = (element: HTMLElement, canvas: HTMLCanvasElement) => {
+  const dpr = window.devicePixelRatio || 1;
+  const elementRect = element.getBoundingClientRect();
+  const containerWidth = canvas.parentElement?.clientWidth ?? 360;
+  const contentWidth = containerWidth - 16; // Account for margins
+  const contentHeight = elementRect.height;
 
-  const rect = element.getBoundingClientRect();
+  // Calculate height while maintaining aspect ratio
+  const elementAspectRatio = elementRect.width / elementRect.height;
+  const canvasHeight = Math.max(MINIMAP_MIN_HEIGHT, Math.min(MINIMAP_MAX_HEIGHT, contentWidth / elementAspectRatio));
 
-  const [x1, y1] = scaleFn(rect.left, rect.top);
-  const [x2, y2] = scaleFn(rect.right, rect.bottom);
+  // Set canvas dimensions with device pixel ratio
+  canvas.width = contentWidth * dpr;
+  canvas.height = canvasHeight * dpr;
 
-  const width = x2 - x1;
-  const height = y2 - y1;
+  // Set CSS dimensions
+  canvas.style.width = `${contentWidth}px`;
+  canvas.style.height = `${canvasHeight}px`;
 
-  ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x1, y1, width, height);
-
-  const children = Array.from(element.children) as HTMLElement[];
-  for (const child of children) {
-    drawChildren(child, depth - 1, ctx, scaleFn);
-  }
+  // Return scale factors
+  return {
+    scaleX: (contentWidth * dpr) / elementRect.width,
+    scaleY: (canvasHeight * dpr) / contentHeight,
+    dpr
+  };
 };
 
 export const createMinimapCanvas = () => {
@@ -100,104 +201,88 @@ export const createMinimapCanvas = () => {
   if (!canvas) {
     canvas = document.createElement('canvas');
     canvas.id = MINIMAP_CANVAS_ID;
-    canvas.width = MINIMAP_WIDTH;
-    canvas.height = MINIMAP_HEIGHT;
     canvas.style.cssText = `
-      position: fixed;
-      right: 24px;
-      top: 24px; /* Positioning from top */
       pointer-events: none;
-      z-index: 2147483646;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgb(0, 0, 0);
       border-radius: 4px;
+      display: none;
+      opacity: 0.9;
+      margin: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: calc(100% - 16px);
     `;
-    document.documentElement.appendChild(canvas);
+  }
+
+  // Find the toolbar's minimap container to insert the canvas
+  const toolbar = document.getElementById('react-scan-toolbar');
+  const minimapContainer = toolbar?.querySelector('#react-scan-minimap-container');
+
+  if (minimapContainer) {
+    minimapContainer.innerHTML = ''; // Clear existing content
+    minimapContainer.appendChild(canvas);
   }
 
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const unsubscribeFns: Partial<
-    Record<Internals['inspectState']['kind'], () => void>
-  > = {};
+  const unsubscribeFns: (() => void)[] = [];
 
   const unsubscribeAll = () => {
-    Object.values(unsubscribeFns).forEach((unSub) => unSub?.());
+    unsubscribeFns.forEach((unSub) => unSub());
+    unsubscribeFns.length = 0;
   };
 
-  ReactScanInternals.subscribeMultiple(['inspectState'], (store: Internals) => {
-    unsubscribeAll();
+  // Subscribe to outline state changes
+  const unsubOutlines = ReactScanInternals.subscribeMultiple(
+    ['activeOutlines', 'scheduledOutlines'],
+    (store) => {
+      const hasActiveOutlines = store.activeOutlines.length > 0;
+      const hasScheduledOutlines = store.scheduledOutlines.length > 0;
+      canvas.style.display = hasActiveOutlines || hasScheduledOutlines ? 'block' : 'none';
+    }
+  );
+  unsubscribeFns.push(unsubOutlines);
 
-    const unSub = (() => {
-      const inspectState = store.inspectState;
+  // Subscribe to inspect state changes
+  const unsubInspect = ReactScanInternals.subscribeMultiple(['inspectState'], (store) => {
+    const inspectState = store.inspectState;
 
-      switch (inspectState.kind) {
-        case 'focused': {
-          const element = inspectState.focusedDomElement;
+    switch (inspectState.kind) {
+      case 'focused': {
+        const element = inspectState.focusedDomElement;
+        const { scaleX, scaleY, dpr } = resizeCanvas(element, canvas);
+        const scaleFn = toCanvasCoordinates(element, scaleX, scaleY, dpr);
 
-          // todo: hiding logic
+        const minimap = {
+          topLeft: [0, 0] as [number, number],
+          bottomRight: [element.scrollWidth, element.scrollHeight] as [number, number],
+          scaleFn,
+          dpr
+        };
 
-          const contentRect = element.getBoundingClientRect();
-          const contentWidth = Math.max(element.scrollWidth, contentRect.width);
-          const contentHeight = Math.max(
-            element.scrollHeight,
-            contentRect.height,
-          );
+        let animationFrameId: number;
 
-          const scaleX = MINIMAP_WIDTH / contentWidth;
-          const scaleY = MINIMAP_HEIGHT / contentHeight;
-          const scale = Math.min(scaleX, scaleY);
+        const draw = () => {
+          drawMinimap(ctx, minimap, element);
+          drawMinimapInsideViewportWindow(ctx, minimap, element);
+          animationFrameId = requestAnimationFrame(draw);
+        };
 
-          const toCanvasCoordinates = (
-            x: number,
-            y: number,
-          ): [number, number] => {
-            const relativeX = x - contentRect.left + element.scrollLeft;
-            const relativeY = y - contentRect.top + element.scrollTop;
+        draw();
 
-            return [relativeX * scale, relativeY * scale];
-          };
-
-          const minimap: {
-            topLeft: [number, number];
-            bottomRight: [number, number];
-            scaleFn: (x: number, y: number) => [number, number];
-          } = {
-            topLeft: [contentRect.left, contentRect.top],
-            bottomRight: [contentRect.right, contentRect.bottom],
-            scaleFn: toCanvasCoordinates,
-          };
-
-          let animationFrameId: number;
-
-          const draw = () => {
-            drawMinimap(ctx, minimap, element);
-            drawMinimapInsideViewportWindow(ctx, minimap, element);
-
-            animationFrameId = requestAnimationFrame(draw);
-          };
-
-          draw();
-
-          return () => {
-            cancelAnimationFrame(animationFrameId);
-            // canvas.style.display = 'none';
-          };
-        }
-        default: {
-          // canvas.style.display = 'none';
-          return;
-        }
+        return () => {
+          cancelAnimationFrame(animationFrameId);
+        };
       }
-    })();
-
-    if (unSub) {
-      unsubscribeFns[store.inspectState.kind] = unSub;
+      default: {
+        return;
+      }
     }
   });
+  unsubscribeFns.push(unsubInspect);
 
   return () => {
     unsubscribeAll();
-    canvas.parentNode?.removeChild(canvas);
+    canvas?.parentNode?.removeChild(canvas);
   };
 };
