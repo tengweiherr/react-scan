@@ -101,6 +101,37 @@ importers:
         specifier: ^0.10.0
         version: 0.10.0
 
+  sierpinski_test:
+    dependencies:
+      '@vercel/analytics':
+        specifier: ^1.4.0
+        version: 1.4.0(react@19.0.0-rc.1)
+      babel-plugin-react-compiler:
+        specifier: 19.0.0-beta-a7bf2bd-20241110
+        version: 19.0.0-beta-a7bf2bd-20241110
+      react:
+        specifier: 19.0.0-rc.1
+        version: 19.0.0-rc.1
+      react-dom:
+        specifier: 19.0.0-rc.1
+        version: 19.0.0-rc.1(react@19.0.0-rc.1)
+      react-scan:
+        specifier: ^0.0.34
+        version: 0.0.34
+      sugar-high:
+        specifier: ^0.7.5
+        version: 0.7.5
+      vite-plugin-inspect:
+        specifier: ^0.8.7
+        version: 0.8.7(rollup@4.27.2)(vite@5.4.3(@types/node@22.9.0)(terser@5.36.0))
+    devDependencies:
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.3.1(vite@5.4.3(@types/node@22.9.0)(terser@5.36.0))
+      vite:
+        specifier: ^5.4.3
+        version: 5.4.3(@types/node@22.9.0)(terser@5.36.0)
+
   test:
     dependencies:
       '@vercel/analytics':
