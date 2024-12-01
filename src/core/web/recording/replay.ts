@@ -82,6 +82,12 @@ class ReactScanReplayPlugin implements ReplayPlugin {
     if (this.ctx) {
       this.ctx.scale(dpi, dpi);
     }
+    // // why is it not already asbolutely positioned??
+    // const canvas = iframe.getElementsByClassName(
+    //   'replayer-mouse-tail',
+    // )[0] as HTMLCanvasElement;
+
+    // canvas.style.position = 'absolute';
   }
 }
 
@@ -95,10 +101,20 @@ export const createReplayer = (
   const replayer = new Replayer(events, {
     plugins: [new ReactScanReplayPlugin()],
     root, // or specify a different container
-    mouseTail: false, // todo: add this back
+    // mouseTail: false, // todo: add this back
   });
 
   replayer.play();
+  // todo: fix this hack later, i don't know why it's needed?
+  setTimeout(() => {
+    const mouseTailCanvas = root.querySelector(
+      '.replayer-mouse-tail',
+    ) as HTMLCanvasElement;
+    if (mouseTailCanvas) {
+      mouseTailCanvas.style.position = 'absolute';
+      mouseTailCanvas.style.zIndex = '9999'; // Set a high z-index
+    }
+  }, 0);
 };
 
 console.log('BROCONFIRMMOMENT');
