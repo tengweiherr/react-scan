@@ -338,7 +338,7 @@ export const start = () => {
         );
         playGeigerClickSound(audioContext, amplitude);
       }
-      flushOutlines(ctx, new Map());
+      // flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
       ReactScanInternals.options.onCommitFinish?.();

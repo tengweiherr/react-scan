@@ -350,7 +350,7 @@ export const fadeOutOutline = (
     animationFrameId = null;
   }
 };
-async function paintOutlines(
+export async function paintOutlines(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   outlines: PendingOutline[],
 ): Promise<void> {

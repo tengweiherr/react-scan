@@ -1,6 +1,6 @@
 {
   "name": "react-scan",
-  "version": "0.0.35",
+  "version": "0.0.37",
   "description": "Scan your React app for renders",
   "keywords": [
     "react",
@@ -117,9 +117,11 @@
   "dependencies": {
     "@clack/core": "^0.3.5",
     "@clack/prompts": "^0.8.2",
+    "@rrweb/types": "2.0.0-alpha.17",
     "kleur": "^4.1.5",
     "mri": "^1.2.0",
-    "playwright": "^1.49.0"
+    "playwright": "^1.49.0",
+    "rrweb": "2.0.0-alpha.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
