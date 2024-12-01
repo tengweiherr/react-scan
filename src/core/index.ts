@@ -10,7 +10,7 @@ import {
 import { logIntro } from './web/log';
 import { playGeigerClickSound } from './web/geiger';
 import { createPerfObserver } from './web/perf-observer';
-import { initReactScanOverlay } from './web/overlay';
+import { getOverlayContext } from './web/overlay';
 import {
   createInspectElementStateMachine,
   type States,
@@ -291,15 +291,11 @@ export const start = () => {
   }
 
   if (document.querySelector('react-scan-overlay')) return;
-  initReactScanOverlay();
-
-  const overlayElement = document.createElement('react-scan-overlay') as any;
-  document.documentElement.appendChild(overlayElement);
 
   if (ReactScanInternals.options.showToolbar) {
     createToolbar();
   }
-  const ctx = overlayElement.getContext();
+
   createInspectElementStateMachine();
 
   const audioContext =
@@ -322,9 +318,10 @@ export const start = () => {
     },
     onRender(fiber, render) {
       if (ReactScanInternals.isPaused) {
-        // don't draw if it's paused
+        // Don't draw if it's paused
         return;
       }
+
       ReactScanInternals.options.onRender?.(fiber, render);
       const outline = getOutline(fiber, render);
       if (!outline) return;
@@ -338,6 +335,10 @@ export const start = () => {
         );
         playGeigerClickSound(audioContext, amplitude);
       }
+
+      const ctx = getOverlayContext();
+      if (!ctx) return; // Ensure ctx is not null
+
       flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
