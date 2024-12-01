@@ -293,12 +293,16 @@ export const start = () => {
   if (document.querySelector('react-scan-overlay')) return;
   initReactScanOverlay();
 
-  const overlayElement = document.createElement('react-scan-overlay') as any;
+  const overlayElement: any = document.createElement(
+    'react-scan-overlay',
+  ) as any;
+  overlayElement.style.display = 'none';
   document.documentElement.appendChild(overlayElement);
 
   if (ReactScanInternals.options.showToolbar) {
     createToolbar();
   }
+
   const ctx = overlayElement.getContext();
   createInspectElementStateMachine();
 
@@ -338,7 +342,8 @@ export const start = () => {
         );
         playGeigerClickSound(audioContext, amplitude);
       }
-      // flushOutlines(ctx, new Map());
+
+      flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
       ReactScanInternals.options.onCommitFinish?.();

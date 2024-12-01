@@ -1,8 +1,12 @@
 import './core/instrumentation/init';
-import { scan } from './index';
+import { scan, scanWithRecord, flush } from './index';
 
 if (typeof window !== 'undefined') {
-  scan();
+  // scan();
+  scanWithRecord();
+
+  // @ts-expect-error
+  window.flush = flush;
   window.reactScan = scan;
 }
 

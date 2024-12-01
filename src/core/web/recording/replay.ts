@@ -101,6 +101,7 @@ export const createReplayer = (
   const replayer = new Replayer(events, {
     plugins: [new ReactScanReplayPlugin()],
     root, // or specify a different container
+
     // mouseTail: false, // todo: add this back
   });
 
@@ -114,6 +115,8 @@ export const createReplayer = (
       mouseTailCanvas.style.position = 'absolute';
       mouseTailCanvas.style.zIndex = '9999'; // Set a high z-index
     }
+
+    replayer.iframe.style.maxHeight = '700px'; // this im just lazy
   }, 0);
 };
 

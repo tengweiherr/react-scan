@@ -62,7 +62,7 @@ export const createToolbar = (): (() => void) => {
     flex-direction: column-reverse;
     align-items: flex-end;
     pointer-events: none;
-    max-height: 450px;
+    height: 0px;
   ">
     <div id="react-scan-toolbar-content" style="
       background: rgba(0, 0, 0, 0.95);
