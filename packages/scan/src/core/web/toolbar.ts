@@ -512,46 +512,26 @@ export const createToolbar = (): (() => void) => {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
-    const edges = [
-      {
-        edge: 'left',
-        distance: Math.abs(toolbarRect.left - EDGE_PADDING),
-        deltaX: EDGE_PADDING - toolbarRect.left,
-        deltaY: 0,
-      },
-      {
-        edge: 'right',
-        distance: Math.abs(viewportWidth - EDGE_PADDING - toolbarRect.right),
-        deltaX: viewportWidth - EDGE_PADDING - toolbarRect.right,
-        deltaY: 0,
-      },
-      {
-        edge: 'top',
-        distance: Math.abs(toolbarRect.top - EDGE_PADDING),
-        deltaX: 0,
-        deltaY: EDGE_PADDING - toolbarRect.top,
-      },
-      {
-        edge: 'bottom',
-        distance: Math.abs(viewportHeight - EDGE_PADDING - toolbarRect.bottom),
-        deltaX: 0,
-        deltaY: viewportHeight - EDGE_PADDING - toolbarRect.bottom,
-      },
-    ];
+    const maxX = viewportWidth - toolbarRect.width - EDGE_PADDING;
+    const maxY = viewportHeight - toolbarRect.height - EDGE_PADDING;
 
-    const closestEdge = edges.reduce((prev, curr) =>
-      curr.distance < prev.distance ? curr : prev,
-    );
+    const newX = Math.min(maxX, Math.max(EDGE_PADDING, toolbarRect.left));
+    const newY = Math.min(maxY, Math.max(EDGE_PADDING, toolbarRect.top));
 
-    currentX += closestEdge.deltaX;
-    currentY += closestEdge.deltaY;
+    const deltaX = newX - toolbarRect.left;
+    const deltaY = newY - toolbarRect.top;
+    // Only update if position changed
+    if (deltaX !== 0 || deltaY !== 0) {
+      currentX += deltaX;
+      currentY += deltaY;
 
-    toolbar.style.transition = `transform ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
-    updateToolbarPosition(currentX, currentY);
+      toolbar.style.transition = `transform ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+      updateToolbarPosition(currentX, currentY);
 
-    setTimeout(() => {
-      toolbar.style.transition = '';
-    }, ANIMATION_DURATION);
+      setTimeout(() => {
+        toolbar.style.transition = '';
+      }, ANIMATION_DURATION);
+    }
   };
 
   toolbarContent.addEventListener('mousedown', (event: any) => {

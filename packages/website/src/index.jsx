@@ -2,38 +2,18 @@ import { scan } from 'react-scan/dist/index.mjs'; // force production build
 import React, { useState, createContext } from 'react';
 import ReactDOMClient from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
-import { highlight } from 'sugar-high';
 
 import './styles.css';
 
 scan({
   enabled: true,
-  // report: true,
-  // log: true,
-  // clearLog: true,
-  // playSound: true,
-  // renderCountThreshold: 100,
-  runInProduction: true,
 });
-
-const copyToClipboard = (text) => {
-  navigator.clipboard.writeText(text).then(() => {
-    const button = document.querySelector('.copy-button');
-    if (button) {
-      button.textContent = 'Copied!';
-      setTimeout(() => {
-        button.textContent = 'Copy';
-      }, 2000);
-    }
-  });
-};
 
 const TooltipContext = createContext({ tooltip: '' });
 
 export const App = () => {
   const [tasks, setTasks] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
-  const [activeTab, setActiveTab] = useState('nextjs-pages');
 
   React.useEffect(() => {
     const checkMobile = () => {
