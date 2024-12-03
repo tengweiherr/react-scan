@@ -1,11 +1,14 @@
 {
   "compilerOptions": {
+    "module": "CommonJS",
+    "esModuleInterop": true,
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
-    "module": "NodeNext",
-    "esModuleInterop": true,
     "strictNullChecks": true,
     "strict": true,
-    "lib": ["esnext", "dom"]
+    "lib": ["esnext", "dom"],
+    "types": ["@types/node"],
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true
   }
 }

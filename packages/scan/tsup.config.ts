@@ -63,4 +63,51 @@ export default defineConfig([
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
   },
+  {
+    entry: [
+      './src/react-component-name/index.ts',
+      './src/react-component-name/vite.ts',
+      './src/react-component-name/webpack.ts',
+      './src/react-component-name/esbuild.ts',
+      './src/react-component-name/rspack.ts',
+      './src/react-component-name/rolldown.ts',
+      './src/react-component-name/rollup.ts',
+    ],
+    outDir: './dist',
+    splitting: false,
+    sourcemap: false,
+    clean: true,
+    format: ['cjs', 'esm'],
+    target: 'esnext',
+    external: [
+      'unplugin',
+      'estree-walker',
+      '@rollup/pluginutils',
+      '@babel/types',
+      '@babel/parser',
+      '@babel/traverse',
+      '@babel/generator',
+      '@babel/core',
+      'rollup',
+      'webpack',
+      'esbuild',
+      'rspack',
+      'vite',
+    ],
+    dts: true,
+    minify: false,
+    treeshake: true,
+    env: {
+      NODE_ENV: process.env.NODE_ENV || 'development',
+    },
+    outExtension: ({ format }) => ({
+      js: format === 'esm' ? '.mjs' : '.js',
+    }),
+    esbuildOptions: (options, context) => {
+      options.mainFields = ['module', 'main'];
+      options.conditions = ['import', 'require', 'node', 'default'];
+      options.format = context.format === 'esm' ? 'esm' : 'cjs';
+      options.preserveSymlinks = true;
+    },
+  },
 ]);
