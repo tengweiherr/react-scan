@@ -52,6 +52,7 @@ module.exports = {
     // 'no-implicit-coercion': 'off',
     '@typescript-eslint/restrict-template-expressions': 'off',
     '@typescript-eslint/array-type': ['error', { default: 'generic' }],
+    'prefer-object-spread': 'off',
   },
   settings: {
     'import/resolver': {
