@@ -66,7 +66,7 @@ export const createInspectElementStateMachine = () => {
     updateCanvasSize(canvas, ctx);
     window.addEventListener('resize', () => {
       updateCanvasSize(canvas!, ctx);
-    }); // todo add cleanup/dispose logic for createInspectElementStateMachine
+    }, {capture: true}); // todo add cleanup/dispose logic for createInspectElementStateMachine
   }
 
   const ctx = canvas.getContext('2d', { alpha: true });
@@ -122,10 +122,10 @@ export const createInspectElementStateMachine = () => {
             clearCanvas();
             updateCanvasSize(canvas, ctx);
           };
-          window.addEventListener('mousemove', mouseMove);
+          window.addEventListener('mousemove', mouseMove, {capture: true});
 
           return () => {
-            window.removeEventListener('mousemove', mouseMove);
+            window.removeEventListener('mousemove', mouseMove, {capture: true});
           };
         }
         case 'inspecting': {
@@ -140,7 +140,7 @@ export const createInspectElementStateMachine = () => {
               'inspecting',
             );
           });
-          // we want to allow the user to be able to inspect clickable things
+          // we want to allow the user to be able to inspect pointerdownable things
           const eventCatcher = document.createElement('div');
           eventCatcher.style.cssText = `
               position: fixed;
@@ -175,9 +175,9 @@ export const createInspectElementStateMachine = () => {
             drawHoverOverlay(el, canvas, ctx, 'inspecting');
           }, 16);
 
-          window.addEventListener('mousemove', mouseMove);
+          window.addEventListener('mousemove', mouseMove, {capture: true});
 
-          const click = (e: MouseEvent) => {
+          const pointerdown = (e: MouseEvent) => {
             e.stopPropagation();
 
             eventCatcher.style.pointerEvents = 'none';
@@ -211,7 +211,7 @@ export const createInspectElementStateMachine = () => {
               parentFocusBtn.style.display = 'none';
             }
           };
-          window.addEventListener('click', click);
+          window.addEventListener('pointerdown', pointerdown, {capture: true});
 
           const keyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -222,7 +222,7 @@ export const createInspectElementStateMachine = () => {
               clearCanvas();
             }
           };
-          window.addEventListener('keydown', keyDown);
+          window.addEventListener('keydown', keyDown, {capture: true});
           let cleanup = () => {
             /**/
           };
@@ -241,9 +241,9 @@ export const createInspectElementStateMachine = () => {
           }
 
           return () => {
-            window.removeEventListener('click', click);
-            window.removeEventListener('mousemove', mouseMove);
-            window.removeEventListener('keydown', keyDown);
+            window.removeEventListener('pointerdown', pointerdown, {capture: true});
+            window.removeEventListener('mousemove', mouseMove, {capture: true});
+            window.removeEventListener('keydown', keyDown, {capture: true});
             eventCatcher.parentNode?.removeChild(eventCatcher);
             cleanup();
           };
@@ -320,9 +320,9 @@ export const createInspectElementStateMachine = () => {
               };
             }
           };
-          window.addEventListener('keydown', keyDown);
+          window.addEventListener('keydown', keyDown, {capture: true});
 
-          const onClickCanvasLockIcon = (e: MouseEvent) => {
+          const onpointerdownCanvasLockIcon = (e: MouseEvent) => {
             if (!currentLockIconRect) {
               return;
             }
@@ -361,7 +361,7 @@ export const createInspectElementStateMachine = () => {
               return;
             }
           };
-          window.addEventListener('click', onClickCanvasLockIcon);
+          window.addEventListener('pointerdown', onpointerdownCanvasLockIcon, {capture: true});
 
           const cleanup = trackElementPosition(
             inspectState.focusedDomElement,
@@ -378,8 +378,11 @@ export const createInspectElementStateMachine = () => {
           return () => {
             cleanup();
 
-            window.removeEventListener('keydown', keyDown);
-            window.removeEventListener('click', onClickCanvasLockIcon);
+            window.removeEventListener('keydown', keyDown, {capture: true});
+            window.removeEventListener(
+              'pointerdown',
+              onpointerdownCanvasLockIcon
+            , {capture: true});
           };
         }
       }
