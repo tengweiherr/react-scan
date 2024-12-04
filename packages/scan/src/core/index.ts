@@ -223,7 +223,7 @@ export const ReactScanInternals: Internals = {
 
 export const getReport = (type?: React.ComponentType<any>) => {
   if (type) {
-    for (const reportData of Store.legacyReportData.values()) {
+    for (const reportData of Array.from(Store.legacyReportData.values())) {
       if (reportData.type === type) {
         return reportData;
       }
