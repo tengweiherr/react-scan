@@ -1,5 +1,5 @@
-import { fastSerialize } from '../../instrumentation/utils';
-import { ReactScanInternals } from '../../index';
+import { fastSerialize } from '../../instrumentation';
+import { Store } from '../../index';
 import {
   getAllFiberContexts,
   getChangedProps,
@@ -48,7 +48,11 @@ export const renderPropsAndState = (
   header.innerHTML = `
     <div class="react-scan-header-left">
       <span class="react-scan-component-name">${componentName}</span>
-      <span class="react-scan-metrics">${renderCount} renders • ${renderTime}ms</span>
+      <span class="react-scan-metrics">
+        ${renderCount > 0 ? `${renderCount} renders` : ''}
+        ${renderCount > 0 && renderTime > 0 ? ' • ' : ''}
+        ${renderTime > 0 ? `${renderTime}ms` : ''}
+      </span>
     </div>
     <div class="react-scan-header-right">
       ${
@@ -72,14 +76,14 @@ export const renderPropsAndState = (
   )!;
   closeButton.addEventListener('click', (e) => {
     e.stopPropagation();
-    const currentState = ReactScanInternals.inspectState;
+    const currentState = Store.inspectState.value;
     if (currentState.kind !== 'focused') return;
 
     propsContainer.style.maxHeight = '0';
     propsContainer.style.width = 'fit-content';
     propsContainer.innerHTML = '';
 
-    ReactScanInternals.inspectState = {
+    Store.inspectState.value = {
       kind: 'inspect-off',
       propContainer: currentState.propContainer,
     };

@@ -1,6 +1,6 @@
 import type { Fiber } from 'react-reconciler';
-import { ReactScanInternals } from '../..';
-import { getDisplayName } from '../../instrumentation/utils';
+import { getDisplayName } from 'bippy';
+import { ReactScanInternals, Store } from '../..';
 import { getCompositeComponentFromElement } from './utils';
 
 interface Rect {
@@ -46,9 +46,9 @@ export const drawHoverOverlay = (
   }
 
   const reportDataFiber =
-    ReactScanInternals.reportDataByFiber.get(parentCompositeFiber) ??
+    Store.reportData.get(parentCompositeFiber) ??
     (parentCompositeFiber.alternate
-      ? ReactScanInternals.reportDataByFiber.get(parentCompositeFiber.alternate)
+      ? Store.reportData.get(parentCompositeFiber.alternate)
       : null);
 
   const stats: PerformanceStats = {
@@ -68,9 +68,9 @@ export const drawHoverOverlay = (
 
     const animate = () => {
       const t =
-        ReactScanInternals.options.animationSpeed === 'fast'
+        ReactScanInternals.options.value.animationSpeed === 'fast'
           ? 0.51
-          : ReactScanInternals.options.animationSpeed === 'slow'
+          : ReactScanInternals.options.value.animationSpeed === 'slow'
             ? 0.1
             : 0;
       currentRect = {

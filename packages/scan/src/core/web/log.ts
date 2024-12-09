@@ -1,4 +1,4 @@
-import type { Render } from '../instrumentation/index';
+import type { Render } from '../instrumentation';
 import { getLabelText } from '../utils';
 
 export const log = (renders: Array<Render>) => {
@@ -39,17 +39,15 @@ export const log = (renders: Array<Render>) => {
       });
     }
 
-    if (render.type === 'context') {
-      if (render.changes) {
-        for (let i = 0, len = render.changes.length; i < len; i++) {
-          const { prevValue, nextValue, unstable } = render.changes[i];
-          if (!unstable) continue;
-          changeLog.push({
-            prev: prevValue,
-            next: nextValue,
-            type: 'context',
-          });
-        }
+    if (render.type === 'context' && render.changes) {
+      for (let i = 0, len = render.changes.length; i < len; i++) {
+        const { prevValue, nextValue, unstable } = render.changes[i];
+        if (!unstable) continue;
+        changeLog.push({
+          prev: prevValue,
+          next: nextValue,
+          type: 'context',
+        });
       }
     }
     logMap.set(labelText, changeLog);

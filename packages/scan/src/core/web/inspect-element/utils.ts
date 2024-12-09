@@ -1,17 +1,18 @@
 import type { Fiber } from 'react-reconciler';
-import { ReactScanInternals } from '../../index';
 import {
   FunctionComponentTag,
   ClassComponentTag,
-  isHostComponent,
+  isHostFiber,
   traverseFiber,
   MemoComponentTag,
   SimpleMemoComponentTag,
   ForwardRefTag,
-} from '../../instrumentation/fiber';
+  isCompositeFiber,
+} from 'bippy';
+import { ReactScanInternals, Store } from '../../index';
 import { getRect } from '../outline';
 
-export const getFiberFromElement = (element: HTMLElement): Fiber | null => {
+export const getFiberFromElement = (element: Element): Fiber | null => {
   if ('__REACT_DEVTOOLS_GLOBAL_HOOK__' in window) {
     const { renderers } = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     if (!renderers) return null;
@@ -35,30 +36,41 @@ export const getFiberFromElement = (element: HTMLElement): Fiber | null => {
       key.startsWith('__reactInternalInstance$') ||
       key.startsWith('__reactFiber')
     ) {
-      return element[key as keyof HTMLElement] as unknown as Fiber;
+      return element[key as keyof Element] as unknown as Fiber;
     }
   }
   return null;
 };
 
-export const getFirstStateNode = (fiber: Fiber): HTMLElement | null => {
-  let current = fiber;
+export const getFirstStateNode = (fiber: Fiber): Element | null => {
+  let current: Fiber | null = fiber;
   while (current) {
-    if (current.stateNode instanceof HTMLElement) {
+    if (current.stateNode instanceof Element) {
       return current.stateNode;
     }
 
     if (!current.child) {
-      return null;
+      break;
     }
     current = current.child;
+  }
+
+  while (current) {
+    if (current.stateNode instanceof Element) {
+      return current.stateNode;
+    }
+
+    if (!current.return) {
+      break;
+    }
+    current = current.return;
   }
   return null;
 };
 
-export const getNearestFiberFromElement = (element: HTMLElement | null) => {
+export const getNearestFiberFromElement = (element: Element | null) => {
   if (!element) return null;
-  const target: HTMLElement | null = element;
+  const target: Element | null = element;
   const originalFiber = getFiberFromElement(target);
   if (!originalFiber) {
     return null;
@@ -76,10 +88,10 @@ export const getParentCompositeFiber = (fiber: Fiber) => {
   let prevNonHost = null;
 
   while (curr) {
-    if (isCompositeComponent(curr)) {
+    if (isCompositeFiber(curr)) {
       return [curr, prevNonHost] as const;
     }
-    if (isHostComponent(curr)) {
+    if (isHostFiber(curr)) {
       prevNonHost = curr;
     }
     curr = curr.return;
@@ -156,7 +168,10 @@ export const isCurrentTree = (fiber: Fiber) => {
   let rootFiber: Fiber | null = null;
 
   while (curr) {
-    if (curr.stateNode && ReactScanInternals.fiberRoots.has(curr.stateNode)) {
+    if (
+      curr.stateNode &&
+      ReactScanInternals.instrumentation?.fiberRoots.has(curr.stateNode)
+    ) {
       rootFiber = curr;
       break;
     }
@@ -173,8 +188,9 @@ export const isCurrentTree = (fiber: Fiber) => {
   return isFiberInTree(fiber, currentRootFiber);
 };
 
-export const getCompositeComponentFromElement = (element: HTMLElement) => {
+export const getCompositeComponentFromElement = (element: Element) => {
   const associatedFiber = getNearestFiberFromElement(element);
+
   if (!associatedFiber) return {};
   const currentAssociatedFiber = isCurrentTree(associatedFiber)
     ? associatedFiber
@@ -241,11 +257,11 @@ export const getAllFiberContexts = (fiber: Fiber): Map<any, unknown> => {
 };
 
 export const hasValidParent = () => {
-  if (ReactScanInternals.inspectState.kind !== 'focused') {
+  if (Store.inspectState.value.kind !== 'focused') {
     return false;
   }
 
-  const { focusedDomElement } = ReactScanInternals.inspectState;
+  const { focusedDomElement } = Store.inspectState.value;
   if (!focusedDomElement) {
     return false;
   }
@@ -266,16 +282,6 @@ export const hasValidParent = () => {
     }
   }
   return hasValidParent;
-};
-
-export const isCompositeComponent = (fiber: Fiber) => {
-  return (
-    fiber.tag === FunctionComponentTag ||
-    fiber.tag === ClassComponentTag ||
-    fiber.tag === SimpleMemoComponentTag ||
-    fiber.tag === MemoComponentTag ||
-    fiber.tag === ForwardRefTag
-  );
 };
 
 export const getOverrideMethods = () => {

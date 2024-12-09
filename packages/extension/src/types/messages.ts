@@ -1,28 +1,39 @@
 import { z } from 'zod';
 
-/**
- *  Incoming messages (from popup to content)
- */
-export const IncomingMessageSchema = z.object({
-  type: z.enum(['OPEN_PANEL', 'START_SCAN', 'STOP_SCAN']),
-});
-
-export type IncomingMessage = z.infer<typeof IncomingMessageSchema>;
-
-/**
- * Outgoing messages (from content to popup)
- */
-export const OutgoingMessageSchema = z.union([
+export const BroadcastSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('SCAN_UPDATE'),
-    reactVersion: z.string().optional(),
-    componentCount: z.number().optional(),
-    rerenderCount: z.number().optional(),
-    status: z.string().optional(),
+    type: z.literal('react-scan:ping'),
   }),
   z.object({
-    type: z.literal('SCAN_COMPLETE'),
+    type: z.literal('react-scan:csp-rules-changed'),
+    data: z.object({
+      domain: z.string(),
+      enabled: z.boolean(),
+    }),
+  }),
+  z.object({
+    type: z.literal('react-scan:is-csp-rules-enabled'),
+    data: z.object({
+      domain: z.string(),
+      enabled: z.boolean(),
+    }),
+  }),
+  z.object({
+    type: z.literal('react-scan:check-version'),
+  }),
+  z.object({
+    type: z.literal('react-scan:update'),
+    data: z.object({
+      reactVersion: z.string(),
+      isReactDetected: z.boolean().optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal('react-scan:state-change'),
+    data: z.object({
+      enabled: z.boolean(),
+    }),
   }),
 ]);
 
-export type OutgoingMessage = z.infer<typeof OutgoingMessageSchema>;
+export type BroadcastMessage = z.infer<typeof BroadcastSchema>;

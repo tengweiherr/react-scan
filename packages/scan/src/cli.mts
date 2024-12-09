@@ -242,7 +242,7 @@ const init = async () => {
   let currentSpinner: ReturnType<typeof spinner> | undefined;
   let currentURL = urlString;
 
-  let interval: NodeJS.Timer | undefined;
+  let interval:ReturnType<typeof setInterval>
 
   const inject = async (url: string) => {
     if (interval) clearInterval(interval);

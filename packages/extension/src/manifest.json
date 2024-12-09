@@ -11,29 +11,106 @@
     "96": "icon/96.png",
     "128": "icon/128.png"
   },
+  "{{firefox}}.browser_specific_settings": {
+    "gecko": {
+      "id": "react-scan@million.dev",
+      "strict_min_version": "57.0"
+    }
+  },
   "{{chrome}}.action": {
-    "default_popup": "src/popup/popup.html"
+    "default_icon": {
+      "16": "icon/16.png",
+      "32": "icon/32.png",
+      "48": "icon/48.png",
+      "96": "icon/96.png",
+      "128": "icon/128.png"
+    }
   },
   "{{firefox}}.browser_action": {
-    "default_popup": "src/popup/popup.html"
+    "default_icon": {
+      "16": "icon/16.png",
+      "32": "icon/32.png",
+      "48": "icon/48.png",
+      "96": "icon/96.png",
+      "128": "icon/128.png"
+    }
   },
   "background": {
-    "{{chrome}}.service_worker": "src/background.ts",
-    "{{firefox}}.scripts": ["src/background.ts"]
+    "{{chrome}}.service_worker": "src/background/index.ts",
+    "{{firefox}}.scripts": [
+      "src/background/index.ts"
+    ]
   },
-  "permissions": ["activeTab", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "{{chrome}}.permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage",
+    "declarativeNetRequest"
+  ],
+  "{{firefox}}.permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage",
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>"
+  ],
+  "{{chrome}}.host_permissions": [
+    "<all_urls>"
+  ],
+  "{{chrome}}.declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "react_scan_csp_rules",
+        "enabled": false,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "{{firefox}}.content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["src/scan-dist.js"],
+      "js": [
+        "src/inject/dev-tools-hook.ts"
+      ],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "{{firefox}}.all_frames": true,
+      "{{firefox}}.match_about_blank": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": ["src/inject/index.ts"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "{{firefox}}.all_frames": true,
+      "{{firefox}}.match_about_blank": true
     },
     {
       "matches": ["<all_urls>"],
-      "js": ["src/content.ts"],
+      "js": [
+        "src/content/index.ts"
+      ],
       "run_at": "document_start"
     }
+  ],
+  "{{chrome}}.web_accessible_resources": [
+    {
+      "resources": [
+        "icon/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "{{firefox}}.web_accessible_resources": [
+    "src/content.js",
+    "icon/*"
   ]
 }

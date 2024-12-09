@@ -1,4 +1,5 @@
-import type { Render } from './instrumentation/index';
+import { type Fiber } from 'react-reconciler';
+import type { Render } from './instrumentation';
 
 export const getLabelText = (renders: Array<Render>) => {
   let labelText = '';
@@ -53,4 +54,13 @@ export const getLabelText = (renders: Array<Render>) => {
     labelText = `${labelText.slice(0, 20)}…`;
   }
   return labelText;
+};
+
+export const addFiberToSet = (fiber: Fiber, set: Set<Fiber>) => {
+  if (fiber.alternate && set.has(fiber.alternate)) {
+    // then the alternate tree fiber exists in the weakset, don't double count the instance
+    return;
+  }
+
+  set.add(fiber);
 };

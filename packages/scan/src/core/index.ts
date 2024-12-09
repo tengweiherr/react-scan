@@ -1,6 +1,14 @@
-import type { Fiber, FiberRoot } from 'react-reconciler';
+import type { Fiber } from 'react-reconciler';
 import * as React from 'react';
-import { instrument, type Render } from './instrumentation/index';
+import { type Signal, signal } from '@preact/signals';
+import {
+  getDisplayName,
+  getTimings,
+  getType,
+  isCompositeFiber,
+  traverseFiber,
+} from 'bippy';
+import { createInstrumentation, type Render } from './instrumentation';
 import {
   type ActiveOutline,
   flushOutlines,
@@ -8,7 +16,6 @@ import {
   type PendingOutline,
 } from './web/outline';
 import { logIntro } from './web/log';
-import { playGeigerClickSound } from './web/geiger';
 import { createPerfObserver } from './web/perf-observer';
 import { initReactScanOverlay } from './web/overlay';
 import {
@@ -16,7 +23,11 @@ import {
   type States,
 } from './web/inspect-element/inspect-state-machine';
 import { createToolbar } from './web/toolbar';
-import { getType } from './instrumentation/utils';
+import { flush } from './monitor/network';
+import type { InternalInteraction } from './monitor/types';
+import { type getSession } from './monitor/utils';
+import { addFiberToSet } from './utils';
+import { playGeigerClickSound } from './web/geiger';
 
 export interface Options {
   /**
@@ -99,160 +110,73 @@ export interface Options {
    */
   animationSpeed?: 'slow' | 'fast' | 'off';
 
+  monitor?: {
+    url: string;
+  };
+
   onCommitStart?: () => void;
-  onRender?: (fiber: Fiber, render: Render) => void;
+  onRender?: (fiber: Fiber, renders: Array<Render>) => void;
   onCommitFinish?: () => void;
   onPaintStart?: (outlines: Array<PendingOutline>) => void;
   onPaintFinish?: (outlines: Array<PendingOutline>) => void;
 }
 
+interface Monitor {
+  pendingRequests: number;
+  url: string | null;
+  apiKey: string | null;
+  interactions: Array<InternalInteraction>;
+  route: string | null;
+  session: ReturnType<typeof getSession>;
+  path: string | null;
+}
+
+interface StoreType {
+  isInIframe: Signal<boolean>;
+  inspectState: Signal<States>;
+  monitor: Signal<Monitor | null>;
+  fiberRoots: WeakSet<Fiber>;
+  reportData: WeakMap<Fiber, RenderData>;
+  legacyReportData: Map<string, RenderData>;
+  lastReportTime: Signal<number>;
+}
+
+interface RenderData {
+  count: number;
+  time: number;
+  renders: Array<Render>;
+  displayName: string | null;
+  type: React.ComponentType<any> | null;
+}
+
 export interface Internals {
-  onCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
-  isInIframe: boolean;
-  isPaused: boolean;
+  instrumentation: ReturnType<typeof createInstrumentation> | null;
   componentAllowList: WeakMap<React.ComponentType<any>, Options> | null;
-  options: Options;
+  options: Signal<Options>;
   scheduledOutlines: Array<PendingOutline>;
   activeOutlines: Array<ActiveOutline>;
-  onRender: ((fiber: Fiber, render: Render) => void) | null;
-  reportDataByFiber: WeakMap<
-    Fiber,
-    {
-      count: number;
-      time: number;
-      badRenders: Array<Render>;
-      displayName: string | null;
-    }
-  >;
-  reportData: Record<
-    string,
-    {
-      count: number;
-      time: number;
-      type: unknown;
-      badRenders: Array<Render>;
-    }
-  >;
-  fiberRoots: WeakSet<Fiber>;
-  inspectState: States;
+  onRender: ((fiber: Fiber, renders: Array<Render>) => void) | null;
 }
 
-type Listener<T> = (value: T) => void;
-
-export interface StoreMethods<T extends object> {
-  subscribe: <K extends keyof T>(
-    key: K,
-    listener: Listener<T[K]>,
-  ) => () => void;
-  set: <K extends keyof T>(key: K, value: T[K]) => void;
-  setState: (state: Partial<T>) => void;
-  emit: <K extends keyof T>(key: K, value: T[K]) => void;
-  subscribeMultiple: (
-    subscribeTo: Array<keyof T>,
-    listener: Listener<T>,
-  ) => () => void;
-}
-
-type Store<T extends object> = T & StoreMethods<T>;
-
-const createStore = <T extends object>(initialData: T): Store<T> => {
-  const data: T = { ...initialData };
-  const listeners: { [K in keyof T]?: Array<Listener<T[K]>> } = {};
-
-  const emit = <K extends keyof T>(key: K, value: T[K]): void => {
-    listeners[key]?.forEach((listener) => listener(value));
-  };
-
-  const set = <K extends keyof T>(key: K, value: T[K]): void => {
-    if (data[key] !== value) {
-      data[key] = value;
-      emit(key, value);
-    }
-  };
-
-  const subscribe = <K extends keyof T>(
-    key: K,
-    listener: Listener<T[K]>,
-  ): (() => void) => {
-    if (!listeners[key]) {
-      listeners[key] = [];
-    }
-    listeners[key]!.push(listener);
-    listener(data[key]);
-    return () => {
-      listeners[key] = listeners[key]!.filter((l) => l !== listener);
-    };
-  };
-
-  const setState = (state: Partial<T>) => {
-    for (const key in state) {
-      if (Object.prototype.hasOwnProperty.call(state, key)) {
-        set(key as keyof T, state[key] as T[keyof T]);
-      }
-    }
-  };
-
-  const subscribeMultiple = (
-    subscribeTo: Array<keyof T>,
-    listener: (store: typeof data) => void,
-  ) => {
-    subscribeTo.forEach((key) => {
-      if (!listeners[key]) {
-        listeners[key] = [];
-      }
-      listeners[key]?.push(() => listener(data));
-    });
-
-    return () => {
-      subscribeTo.forEach((key) => {
-        listeners[key] = listeners[key]?.filter((cb) => cb !== listener);
-      });
-    };
-  };
-
-  const proxy = new Proxy(data, {
-    get(target, prop, receiver) {
-      if (prop === 'subscribe') return subscribe;
-      if (prop === 'setState') return setState;
-      if (prop === 'emit') return emit;
-      if (prop === 'set') return set;
-      if (prop === 'subscribeMultiple') return subscribeMultiple;
-
-      return Reflect.get(target, prop, receiver);
-    },
-    set(target, prop, value) {
-      if (prop in target) {
-        set(prop as keyof T, value as T[keyof T]);
-        return true;
-      }
-      throw new Error(`Property "${String(prop)}" does not exist`);
-    },
-    deleteProperty(_, prop) {
-      throw new Error(`Cannot delete property "${String(prop)}" from store`);
-    },
-  });
-
-  return proxy as Store<T>;
+export const Store: StoreType = {
+  isInIframe: signal(
+    typeof window !== 'undefined' && window.self !== window.top,
+  ),
+  inspectState: signal<States>({
+    kind: 'uninitialized',
+  }),
+  monitor: signal<Monitor | null>(null),
+  fiberRoots: new WeakSet<Fiber>(),
+  reportData: new WeakMap<Fiber, RenderData>(),
+  legacyReportData: new Map<string, RenderData>(),
+  lastReportTime: signal(0),
+  // instanceTracker: new Map<string, Set<Fiber>>(),
 };
 
-const tryParse = (x: any) => {
-  try {
-    return JSON.parse(x);
-  } catch {
-    return 'false';
-  }
-};
-export const ReactScanInternals = createStore<Internals>({
-  onCommitFiberRoot: (_rendererID: number, _root: FiberRoot): void => {
-    /**/
-  },
-  isInIframe: typeof window !== 'undefined' && window.self !== window.top,
-  isPaused:
-    typeof window === 'undefined'
-      ? true
-      : tryParse(localStorage.getItem('react-scan-paused') ?? 'false'),
+export const ReactScanInternals: Internals = {
+  instrumentation: null,
   componentAllowList: null,
-  options: {
+  options: signal({
     enabled: true,
     includeChildren: true,
     playSound: false,
@@ -262,46 +186,148 @@ export const ReactScanInternals = createStore<Internals>({
     report: undefined,
     alwaysShowLabels: false,
     animationSpeed: 'fast',
-  },
+  }),
   onRender: null,
-  reportData: {},
-  reportDataByFiber: new WeakMap(),
   scheduledOutlines: [],
   activeOutlines: [],
-  fiberRoots: new WeakSet(),
-  inspectState: {
-    kind: 'uninitialized',
-  },
-});
+};
 
-export const getReport = () => ReactScanInternals.reportData;
+export const getReport = (type?: React.ComponentType<any>) => {
+  if (type) {
+    for (const reportData of Array.from(Store.legacyReportData.values())) {
+      if (reportData.type === type) {
+        return reportData;
+      }
+    }
+    return null;
+  }
+  return Store.legacyReportData;
+};
 
 export const setOptions = (options: Options) => {
-  ReactScanInternals.options = {
-    ...ReactScanInternals.options,
+  const { instrumentation } = ReactScanInternals;
+  if (instrumentation) {
+    instrumentation.isPaused.value = options.enabled === false;
+  }
+  ReactScanInternals.options.value = {
+    ...ReactScanInternals.options.value,
     ...options,
   };
 };
 
 export const getOptions = () => ReactScanInternals.options;
 
+export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
+  let reportFiber: Fiber;
+  let prevRenderData: RenderData | undefined;
+
+  const currentFiberData = Store.reportData.get(fiber);
+  if (currentFiberData) {
+    reportFiber = fiber;
+    prevRenderData = currentFiberData;
+  } else if (!fiber.alternate) {
+    reportFiber = fiber;
+    prevRenderData = undefined;
+  } else {
+    reportFiber = fiber.alternate;
+    prevRenderData = Store.reportData.get(fiber.alternate);
+  }
+
+  const displayName = getDisplayName(fiber.type);
+
+  Store.lastReportTime.value = performance.now();
+
+  if (prevRenderData) {
+    prevRenderData.renders.push(...renders);
+  } else {
+    const { selfTime } = getTimings(fiber);
+
+    const reportData = {
+      count: renders.length,
+      time: selfTime,
+      renders,
+      displayName,
+      type: null,
+    };
+
+    Store.reportData.set(reportFiber, reportData);
+  }
+
+  if (displayName && ReactScanInternals.options.value.report) {
+    const prevLegacyRenderData = Store.legacyReportData.get(displayName);
+
+    if (prevLegacyRenderData) {
+      prevLegacyRenderData.renders.push(...renders);
+    } else {
+      const { selfTime } = getTimings(fiber);
+
+      const reportData = {
+        count: renders.length,
+        time: selfTime,
+        renders,
+        displayName: null,
+        type: getType(fiber.type) || fiber.type,
+      };
+      Store.legacyReportData.set(displayName, reportData);
+    }
+  }
+
+  const monitor = Store.monitor.value;
+  if (monitor && monitor.interactions && monitor.interactions.length > 0) {
+    const latestInteraction =
+      monitor.interactions[monitor.interactions.length - 1];
+
+    let totalTime = 0;
+    for (const render of renders) {
+      totalTime += render.time;
+    }
+
+    const displayName = getDisplayName(fiber.type);
+    if (!displayName) {
+      // it may be useful to somehow report the first ancestor with a display name instead of completely ignoring
+      return;
+    }
+    let component = latestInteraction.components.get(displayName);
+    if (!component) {
+      component = {
+        fibers: new Set(),
+        name: displayName,
+        renders: 0,
+        totalTime,
+        retiresAllowed: 7, // allow max 7 retries before the set of components do not get reported (avoid memory leaks)
+        uniqueInteractionId: latestInteraction.uniqueInteractionId,
+      };
+      latestInteraction.components.set(displayName, component);
+    }
+    addFiberToSet(fiber, component.fibers);
+
+    component.renders += renders.length;
+    if (!component.totalTime) {
+      component.totalTime = 0;
+    }
+    component.totalTime += component.totalTime
+      ? component.totalTime + totalTime
+      : totalTime;
+  }
+};
+let flushInterval: any | undefined;
+
 export const start = () => {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined') return;
+
+  const existingOverlay = document.querySelector('react-scan-overlay');
+  if (existingOverlay) {
     return;
   }
-
-  if (document.querySelector('react-scan-overlay')) return;
   initReactScanOverlay();
-
   const overlayElement = document.createElement('react-scan-overlay') as any;
+
   document.documentElement.appendChild(overlayElement);
 
-  if (ReactScanInternals.options.showToolbar) {
-    createToolbar();
-  }
+  const options = ReactScanInternals.options.value;
+
   const ctx = overlayElement.getContext();
   createInspectElementStateMachine();
-
   const audioContext =
     typeof window !== 'undefined'
       ? new (window.AudioContext ||
@@ -316,34 +342,99 @@ export const start = () => {
     ReactScanInternals,
   };
 
-  instrument({
+  if (Store.monitor.value) {
+    if (flushInterval) {
+      clearInterval(flushInterval);
+    }
+
+    flushInterval = setInterval(() => {
+      void flush();
+    }, 2000);
+  }
+
+  // TODO: dynamic enable, and inspect-off check
+  const instrumentation = createInstrumentation({
     onCommitStart() {
-      ReactScanInternals.options.onCommitStart?.();
+      ReactScanInternals.options.value.onCommitStart?.();
     },
-    onRender(fiber, render) {
-      if (ReactScanInternals.isPaused) {
+    isValidFiber(fiber) {
+      if (ignoredProps.has(fiber.memoizedProps)) {
+        return false;
+      }
+
+      const allowList = ReactScanInternals.componentAllowList;
+      const shouldAllow =
+        allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
+
+      if (shouldAllow) {
+        const parent = traverseFiber(
+          fiber,
+          (node) => {
+            const options =
+              allowList?.get(node.type) ?? allowList?.get(node.elementType);
+            return options?.includeChildren;
+          },
+          true,
+        );
+        if (!parent && !shouldAllow) return false;
+      }
+      return true;
+    },
+    onRender(fiber, renders) {
+      if (ReactScanInternals.instrumentation?.isPaused.value) {
         // don't draw if it's paused
         return;
       }
-      ReactScanInternals.options.onRender?.(fiber, render);
-      const outline = getOutline(fiber, render);
-      if (!outline) return;
-      ReactScanInternals.scheduledOutlines.push(outline);
-
-      if (ReactScanInternals.options.playSound && audioContext) {
-        const renderTimeThreshold = 10;
-        const amplitude = Math.min(
-          1,
-          (render.time - renderTimeThreshold) / (renderTimeThreshold * 2),
-        );
-        playGeigerClickSound(audioContext, amplitude);
+      if (isCompositeFiber(fiber)) {
+        reportRender(fiber, renders);
       }
-      flushOutlines(ctx, new Map());
+
+      ReactScanInternals.options.value.onRender?.(fiber, renders);
+
+      const type = getType(fiber.type) || fiber.type;
+      if (type && typeof type === 'function' && typeof type === 'object') {
+        const renderData = (type.renderData || {
+          count: 0,
+          time: 0,
+          renders: [],
+        }) as RenderData;
+        const firstRender = renders[0];
+        renderData.count += firstRender.count;
+        renderData.time += firstRender.time;
+        renderData.renders.push(firstRender);
+        type.renderData = renderData;
+      }
+
+      if (!Store.monitor.value) {
+        for (let i = 0, len = renders.length; i < len; i++) {
+          const render = renders[i];
+          const outline = getOutline(fiber, render);
+          if (!outline) continue;
+          ReactScanInternals.scheduledOutlines.push(outline);
+
+          // audio context can take up an insane amount of cpu, todo: figure out why
+          if (ReactScanInternals.options.value.playSound && audioContext) {
+            const renderTimeThreshold = 10;
+            const amplitude = Math.min(
+              1,
+              (render.time - renderTimeThreshold) / (renderTimeThreshold * 2),
+            );
+            playGeigerClickSound(audioContext, amplitude);
+          }
+        }
+        flushOutlines(ctx, new Map());
+      }
     },
     onCommitFinish() {
-      ReactScanInternals.options.onCommitFinish?.();
+      ReactScanInternals.options.value.onCommitFinish?.();
     },
   });
+
+  ReactScanInternals.instrumentation = instrumentation;
+
+  if (options.showToolbar) {
+    createToolbar();
+  }
 };
 
 export const withScan = <T>(
@@ -351,7 +442,8 @@ export const withScan = <T>(
   options: Options = {},
 ) => {
   setOptions(options);
-  const { isInIframe, componentAllowList } = ReactScanInternals;
+  const isInIframe = Store.isInIframe.value;
+  const componentAllowList = ReactScanInternals.componentAllowList;
   if (isInIframe || options.enabled === false) return component;
   if (!componentAllowList) {
     ReactScanInternals.componentAllowList = new WeakMap<
@@ -370,7 +462,7 @@ export const withScan = <T>(
 
 export const scan = (options: Options = {}) => {
   setOptions(options);
-  const { isInIframe } = ReactScanInternals;
+  const isInIframe = Store.isInIframe.value;
   if (isInIframe || options.enabled === false) return;
 
   start();
@@ -384,24 +476,26 @@ export const useScan = (options: Options) => {
 
 export const onRender = (
   type: unknown,
-  _onRender: (fiber: Fiber, render: Render) => void,
+  _onRender: (fiber: Fiber, renders: Array<Render>) => void,
 ) => {
   const prevOnRender = ReactScanInternals.onRender;
-  ReactScanInternals.onRender = (fiber, render) => {
-    prevOnRender?.(fiber, render);
+  ReactScanInternals.onRender = (fiber, renders) => {
+    prevOnRender?.(fiber, renders);
     if (getType(fiber.type) === type) {
-      _onRender(fiber, render);
+      _onRender(fiber, renders);
     }
   };
 };
 
-export const getRenderInfo = (type: unknown) => {
-  type = getType(type) || type;
-  const reportData = ReactScanInternals.reportData;
-  for (const componentName in reportData) {
-    if (reportData[componentName].type === type) {
-      return reportData[componentName];
-    }
+export const ignoredProps = new WeakSet<
+  Exclude<
+    React.ReactNode,
+    undefined | null | string | number | boolean | bigint
+  >
+>();
+
+export const ignoreScan = (node: React.ReactNode) => {
+  if (typeof node === 'object' && node) {
+    ignoredProps.add(node);
   }
-  return null;
 };

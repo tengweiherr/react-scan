@@ -1,4 +1,4 @@
-import './core/instrumentation/init';
+import 'bippy';
 import { scan } from './index';
 
 if (typeof window !== 'undefined') {

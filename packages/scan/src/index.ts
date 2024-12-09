@@ -1,3 +1,3 @@
-import './core/instrumentation/init';
+import 'bippy';
 
 export * from './core/index';
