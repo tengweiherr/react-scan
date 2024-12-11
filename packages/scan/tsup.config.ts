@@ -29,9 +29,34 @@ const addDirectivesToChunkFiles = async (readPath: string): Promise<void> => {
 
 export default defineConfig([
   {
+    entry: ['./src/auto.ts'],
+    outDir: DIST_PATH,
+    splitting: false,
+    clean: false,
+    sourcemap: false,
+    format: ['iife'],
+    target: 'esnext',
+    platform: 'browser',
+    treeshake: true,
+    dts: true,
+    minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
+    env: {
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
+    },
+    external: [
+      'react',
+      'react-dom',
+      'react-reconciler',
+      'next',
+      'next/navigation',
+      'react-router',
+      'react-router-dom',
+      '@remix-run/react',
+    ],
+  },
+  {
     entry: [
       './src/index.ts',
-      './src/auto.ts',
       './src/rsc-shim.ts',
       './src/core/monitor/index.ts',
       './src/core/monitor/params/next.ts',
@@ -44,7 +69,7 @@ export default defineConfig([
     splitting: false,
     clean: true,
     sourcemap: false,
-    format: ['cjs', 'esm', 'iife'],
+    format: ['cjs', 'esm'],
     target: 'esnext',
     platform: 'browser',
     treeshake: true,
@@ -56,7 +81,7 @@ export default defineConfig([
         addDirectivesToChunkFiles(`${DIST_PATH}/core/monitor`),
       ]);
     },
-    minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
+    minify: false,
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
