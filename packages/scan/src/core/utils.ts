@@ -1,4 +1,6 @@
 import { type Fiber } from 'react-reconciler';
+import { getType, traverseFiber } from 'bippy';
+import { ignoredProps, ReactScanInternals } from '..';
 import type { Render } from './instrumentation';
 
 export const getLabelText = (renders: Array<Render>) => {
@@ -64,3 +66,52 @@ export const addFiberToSet = (fiber: Fiber, set: Set<Fiber>) => {
 
   set.add(fiber);
 };
+
+export const isValidFiber = (fiber: Fiber) => {
+  if (ignoredProps.has(fiber.memoizedProps)) {
+    return false;
+  }
+
+  const allowList = ReactScanInternals.componentAllowList;
+  const shouldAllow =
+    allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
+
+  if (shouldAllow) {
+    const parent = traverseFiber(
+      fiber,
+      (node) => {
+        const options =
+          allowList?.get(node.type) ?? allowList?.get(node.elementType);
+        return options?.includeChildren;
+      },
+      true,
+    );
+    if (!parent && !shouldAllow) return false;
+  }
+  return true;
+};
+
+export const updateFiberRenderData = (fiber: Fiber, renders: Array<Render>) => {
+  ReactScanInternals.options.value.onRender?.(fiber, renders);
+  const type = getType(fiber.type) || fiber.type;
+  if (type && typeof type === 'function' && typeof type === 'object') {
+    const renderData = (type.renderData || {
+      count: 0,
+      time: 0,
+      renders: [],
+    }) as RenderData;
+    const firstRender = renders[0];
+    renderData.count += firstRender.count;
+    renderData.time += firstRender.time;
+    renderData.renders.push(firstRender);
+    type.renderData = renderData;
+  }
+};
+
+export interface RenderData {
+  count: number;
+  time: number;
+  renders: Array<Render>;
+  displayName: string | null;
+  type: React.ComponentType<any> | null;
+}

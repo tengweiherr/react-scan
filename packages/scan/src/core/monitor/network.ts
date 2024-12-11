@@ -77,7 +77,7 @@ const toPayloadInteraction = (interactions: Array<InternalInteraction>) =>
         type: interaction.performanceEntry.type,
         route: interaction.route,
         url: interaction.url,
-        uniqueInteractionId: interaction.uniqueInteractionId
+        uniqueInteractionId: interaction.uniqueInteractionId,
       }) satisfies Interaction,
   );
 
@@ -103,9 +103,6 @@ export const flush = async (): Promise<void> => {
   const session = await getSession().catch(() => null);
 
   if (!session) return;
-  // nisarg do not add this back fix it on your side
-  // session.route = monitor.route;
-  // session.url = window.location.toString();
 
   const aggregatedComponents = aggregateComponents(monitor.interactions);
 

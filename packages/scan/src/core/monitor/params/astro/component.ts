@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { BaseMonitor } from '../..';
+import { Monitoring as BaseMonitoring } from '../..';
 import { computeRoute } from '../utils';
 
 export function AstroMonitor(props: {
@@ -11,7 +11,7 @@ export function AstroMonitor(props: {
   const path = props.pathname;
   const route = computeRoute(path, props.params);
 
-  return createElement(BaseMonitor, {
+  return createElement(BaseMonitoring, {
     ...props,
     route,
     path,

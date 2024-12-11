@@ -4,7 +4,7 @@
 import { useParams, usePathname, useSearchParams } from 'next/navigation.js';
 // import React from 'react';
 import { createElement } from 'react';
-import { BaseMonitor } from '..';
+import { Monitoring as BaseMonitoring } from '..';
 import { computeRoute } from './utils';
 // import { computeRoute } from '../utils';
 // does this work in pages and app router? Idk
@@ -31,7 +31,7 @@ export function Monitoring(props: { url?: string; apiKey: string }) {
   const { route, path } = useRoute();
 
   // we need to fix build so this doesn't get compiled to preact jsx
-  return createElement(BaseMonitor, {
+  return createElement(BaseMonitoring, {
     ...props,
     route,
     path,
