@@ -10,7 +10,7 @@ import {
   Store,
 } from '..';
 import { createInstrumentation, type Render } from '../instrumentation';
-import { addFiberToSet, isValidFiber, updateFiberRenderData } from '../utils';
+import { updateFiberRenderData } from '../utils';
 import { initPerformanceMonitoring } from './performance';
 import { getSession } from './utils';
 import { flush } from './network';
@@ -112,13 +112,15 @@ export const startMonitoring = () => {
   globalThis.__REACT_SCAN__ = {
     ReactScanInternals,
   };
-  const instrumentation = createInstrumentation({
-    kind: 'monitoring',
+  const instrumentation = createInstrumentation('monitoring', {
     onCommitStart() {
       ReactScanInternals.options.value.onCommitStart?.();
     },
-    isValidFiber(fiber) {
-      return isValidFiber(fiber);
+    onError() {
+      // todo: report to server?
+    },
+    isValidFiber() {
+      return true;
     },
     onRender(fiber, renders) {
       if (ReactScanInternals.instrumentation?.isPaused.value) {
@@ -173,7 +175,11 @@ const aggregateComponentRenderToInteraction = (
       };
       latestInteraction.components.set(displayName, component);
     }
-    addFiberToSet(fiber, component.fibers);
+
+    if (fiber.alternate && !component.fibers.has(fiber.alternate)) {
+      // then the alternate tree fiber exists in the weakset, don't double count the instance
+      component.fibers.add(fiber.alternate);
+    }
 
     component.renders += renders.length;
     if (!component.totalTime) {

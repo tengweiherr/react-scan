@@ -1,5 +1,4 @@
 import type { Fiber, FiberRoot } from 'react-reconciler';
-import type * as React from 'react';
 import {
   getTimings,
   hasMemoCache,
@@ -9,39 +8,155 @@ import {
   createFiberVisitor,
   getDisplayName,
   getType,
+  isValidElement,
+  didFiberCommit,
+  getMutatedHostFibers,
+  getNearestHostFiber,
 } from 'bippy';
-import { signal } from '@preact/signals';
-import { ReactScanInternals } from '.';
+import { type Signal, signal } from '@preact/signals';
+import { ReactScanInternals } from './index';
+
+let fps = 0;
+let lastTime = performance.now();
+let frameCount = 0;
+
+export const getFPS = () => {
+  const updateFPS = () => {
+    frameCount++;
+    const now = performance.now();
+    if (now - lastTime >= 1000) {
+      fps = frameCount;
+      frameCount = 0;
+      lastTime = now;
+    }
+    requestAnimationFrame(updateFPS);
+  };
+
+  if (!inited) {
+    inited = true;
+    updateFPS();
+  }
+
+  return fps;
+};
+
+const truncateFloat = (value: number, maxLen = 10000 /* 4 digits */) => {
+  if (
+    typeof value === 'number' &&
+    parseInt(value as any) !== value /* float check */
+  ) {
+    value = ~~(value * maxLen) / maxLen;
+  }
+  return value;
+};
+
+const THRESHOLD_FPS = 60;
+
+export const getFiberRenderScore = (fiber: Fiber) => {
+  const hostFiber = getNearestHostFiber(fiber);
+  const hasMutation = didFiberCommit(fiber);
+  const mutatedHostFibers = getMutatedHostFibers(fiber);
+  const isVisible =
+    hostFiber &&
+    isElementVisible(hostFiber.stateNode) &&
+    isElementInViewport(hostFiber.stateNode);
+  const fps = getFPS();
+
+  let unnecessaryScore =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+    isVisible || mutatedHostFibers.length || hasMutation ? 0 : 1;
+  for (const mutatedHostFiber of mutatedHostFibers) {
+    const node = mutatedHostFiber.stateNode;
+    if (!isElementVisible(node) || !isElementInViewport(node)) {
+      unnecessaryScore += 1 / mutatedHostFibers.length;
+    }
+  }
+
+  return {
+    unnecessary: truncateFloat(unnecessaryScore),
+    slow:
+      fps < THRESHOLD_FPS
+        ? truncateFloat((THRESHOLD_FPS - fps) / THRESHOLD_FPS)
+        : 0,
+  };
+};
+
+export const isElementVisible = (el: HTMLElement) => {
+  const style = window.getComputedStyle(el);
+  return (
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    style.contentVisibility !== 'hidden' &&
+    style.opacity !== '0'
+  );
+};
+
+let initedEventListeners = false;
+let scrollX: number | null = null;
+let scrollY: number | null = null;
+let innerWidth: number | null = null;
+let innerHeight: number | null = null;
+
+export const getWindowDimensions = () => {
+  if (scrollX === null) scrollX = window.scrollX;
+  if (scrollY === null) scrollY = window.scrollY;
+  if (innerWidth === null) innerWidth = window.innerWidth;
+  if (innerHeight === null) innerHeight = window.innerHeight;
+
+  if (!initedEventListeners) {
+    initedEventListeners = true;
+    const handleResize = () => {
+      scrollX = null;
+      scrollY = null;
+      innerWidth = null;
+      innerHeight = null;
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleResize);
+  }
+  return {
+    top: scrollY,
+    left: scrollX,
+    right: scrollX + innerWidth,
+    bottom: scrollY + innerHeight,
+  };
+};
+
+export const isElementInViewport = (el: HTMLElement) => {
+  const elTop = el.offsetTop;
+  const elLeft = el.offsetLeft;
+  const elWidth = el.offsetWidth;
+  const elHeight = el.offsetHeight;
+  const { top, left, right, bottom } = getWindowDimensions();
+
+  return (
+    elTop + elHeight > top &&
+    elLeft + elWidth > left &&
+    elTop < bottom &&
+    elLeft < right
+  );
+};
 
 export interface Change {
+  type: 'props' | 'context' | 'state';
   name: string;
   prevValue: unknown;
   nextValue: unknown;
   unstable: boolean;
 }
 
+export type Category = 'slow' | 'unnecessary' | 'offscreen';
+
 export interface Render {
-  type: 'props' | 'context' | 'state' | 'misc';
-  name: string | null;
+  componentName: string | null;
   time: number;
   count: number;
-  trigger: boolean;
   forget: boolean;
   changes: Array<Change> | null;
-  label?: string;
+  category: Category;
 }
 
 const unstableTypes = ['function', 'object'];
-
-export const isValidElement = (value: unknown): value is React.ReactElement => {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    '$$typeof' in value &&
-    typeof value.$$typeof === 'symbol' &&
-    String(value.$$typeof) === 'Symbol(react.element)'
-  );
-};
 
 export const fastSerialize = (value: unknown) => {
   switch (typeof value) {
@@ -89,8 +204,11 @@ export const fastSerialize = (value: unknown) => {
   }
 };
 
-// eslint-disable-next-line @typescript-eslint/ban-types
-export const getPropsRender = (fiber: Fiber, type: Function): Render | null => {
+export const getPropsChanges = (
+  fiber: Fiber,
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  type: Function,
+): Render | null => {
   const changes: Array<Change> = [];
 
   const prevProps = fiber.alternate?.memoizedProps;
@@ -133,7 +251,36 @@ export const getPropsRender = (fiber: Fiber, type: Function): Render | null => {
   return {
     type: 'props',
     count: 1,
-    trigger: false,
+    changes,
+    name: getDisplayName(type),
+    time: selfTime,
+    forget: hasMemoCache(fiber),
+  };
+};
+
+export const getStateRender = (
+  fiber: Fiber,
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  type: Function,
+): Render | null => {
+  const changes: Array<Change> = [];
+
+  traverseState(fiber, (prevState, nextState) => {
+    if (Object.is(prevState.memoizedState, nextState.memoizedState)) return;
+    const change: Change = {
+      name: '',
+      prevValue: prevState.memoizedState,
+      nextValue: nextState.memoizedState,
+      unstable: false,
+    };
+    changes.push(change);
+  });
+
+  const { selfTime } = getTimings(fiber);
+
+  return {
+    type: 'state',
+    count: 1,
     changes,
     name: getDisplayName(type),
     time: selfTime,
@@ -179,7 +326,6 @@ export const getContextRender = (
   return {
     type: 'context',
     count: 1,
-    trigger: false,
     changes,
     name: getDisplayName(type),
     time: selfTime,
@@ -187,134 +333,119 @@ export const getContextRender = (
   };
 };
 
-/**
- * We need to explicitly keep track of both devtool & monitoring handlers because:
- * - we do not have an unsubscribe api, so we cannot have a set of handlers running at once
- * - by keeping track of the handlers for each type of instrumentation, we can allow the user to run both
- * monitoring and devtools, without them conflicting
- * - we need to explicitly decouple the functionality, meaning we will never run monitoring specific code in
- * devtool instrumentation, and vice versa
- */
+type OnRenderHandler = (fiber: Fiber, renders: Array<Render>) => void;
+type OnCommitStartHandler = () => void;
+type OnCommitFinishHandler = () => void;
+type OnErrorHandler = (error: unknown) => void;
+type IsValidFiberHandler = (fiber: Fiber) => boolean;
 
-type InstrumentationKind = 'devtool' | 'monitoring';
+interface InstrumentationConfig {
+  onCommitStart: OnCommitStartHandler;
+  isValidFiber: IsValidFiberHandler;
+  onRender: OnRenderHandler;
+  onCommitFinish: OnCommitFinishHandler;
+  onError: OnErrorHandler;
+}
 
-const currentHandlers: Record<
-  InstrumentationKind,
-  Parameters<typeof createInstrumentation>[0] | null
-> = {
-  devtool: null,
-  monitoring: null,
-};
+interface InstrumentationInstance {
+  key: string;
+  config: InstrumentationConfig;
+  instrumentation: Instrumentation;
+}
 
-export const createInstrumentation = (params: {
-  onCommitStart: () => void;
-  isValidFiber: (fiber: Fiber) => boolean;
-  onRender: (fiber: Fiber, renders: Array<Render>) => void;
-  onCommitFinish: () => void;
-  kind: 'devtool' | 'monitoring';
-}) => {
-  const instrumentation = {
-    isPaused: signal(!ReactScanInternals.options.value.enabled), // this will typically be false, but in cases where a user provides showToolbar: true, this will be true
+interface Instrumentation {
+  isPaused: Signal<boolean>;
+  fiberRoots: Set<FiberRoot>;
+}
+
+const instrumentationInstances = new Map<string, InstrumentationInstance>();
+let inited = false;
+
+const getAllInstances = () => Array.from(instrumentationInstances.values());
+
+export const createInstrumentation = (
+  instanceKey: string,
+  config: InstrumentationConfig,
+) => {
+  const instrumentation: Instrumentation = {
+    // this will typically be false, but in cases where a user provides showToolbar: true, this will be true
+    isPaused: signal(!ReactScanInternals.options.value.enabled),
     fiberRoots: new Set<FiberRoot>(),
-    onCommitFiberRoot: (_rendererID: number, _root: FiberRoot) => {
-      /**/
-    },
   };
-
-  currentHandlers[params.kind] = params;
-
-  const createHandleRender =
-    (handler: Parameters<typeof createInstrumentation>[0]) =>
-    (fiber: Fiber) => {
-      const type = getType(fiber.type);
-      if (!type) return null;
-      if (!handler.isValidFiber(fiber)) return null;
-
-      const propsRender = getPropsRender(fiber, type);
-      const contextRender = getContextRender(fiber, type);
-
-      let trigger = false;
-      if (fiber.alternate) {
-        const didStateChange = traverseState(fiber, (prevState, nextState) => {
-          return !Object.is(prevState.memoizedState, nextState.memoizedState);
-        });
-        if (didStateChange) {
-          trigger = true;
-        }
-      }
-      const name = getDisplayName(type);
-      if (name === 'Million(Profiler)') return;
-
-      if (!propsRender && !contextRender) return null;
-
-      const renders: Array<Render> = [];
-      if (propsRender) {
-        propsRender.trigger = trigger;
-        renders.push(propsRender);
-      }
-      if (contextRender) {
-        contextRender.trigger = trigger;
-        renders.push(contextRender);
-      }
-      const { selfTime } = getTimings(fiber);
-      if (trigger) {
-        renders.push({
-          type: 'state',
-          count: 1,
-          trigger,
-          changes: [],
-          name: getDisplayName(type),
-          time: selfTime,
-          forget: hasMemoCache(fiber),
-        });
-      }
-      if (!propsRender && !contextRender && !trigger) {
-        renders.push({
-          type: 'misc',
-          count: 1,
-          trigger,
-          changes: [],
-          name: getDisplayName(type),
-          time: selfTime,
-          forget: hasMemoCache(fiber),
-        });
-      }
-      handler.onRender(fiber, renders);
-    };
-  const handler = currentHandlers[params.kind];
-  if (!handler) {
-    // todo: make a dev invariant abstraction
-    if (process.env.NODE_ENV !== 'production') {
-      throw new Error(
-        'Invariant: Handler for supplied kind must be defined at this point in the program',
-      );
-    }
-  }
-  const visitor = createFiberVisitor({
-    onRender: createHandleRender(handler!),
-    onError: (error) => {
-      // todo(Rob): don't log errors if this is instrumentation for monitoring
-      // eslint-disable-next-line no-console
-      console.error('[React Scan] Error instrumenting: ', error);
-    },
+  instrumentationInstances.set(instanceKey, {
+    key: instanceKey,
+    config,
+    instrumentation,
   });
+  if (!inited) {
+    inited = true;
+    const visitor = createFiberVisitor({
+      onRender(fiber) {
+        const type = getType(fiber.type);
+        if (!type) return null;
 
-  const onCommitFiberRoot = (rendererID: number, root: FiberRoot) => {
-    if (instrumentation.isPaused.value) return;
-    currentHandlers.devtool?.onCommitStart();
-    currentHandlers.monitoring?.onCommitStart();
-    if (root) {
-      instrumentation.fiberRoots.add(root);
-    }
-    visitor(rendererID, root);
+        const allInstances = getAllInstances();
+        const validInstancesIndicies: Array<number> = [];
+        for (let i = 0, len = allInstances.length; i < len; i++) {
+          const instance = allInstances[i];
+          if (!instance.config.isValidFiber(fiber)) continue;
+          validInstancesIndicies.push(i);
+        }
+        if (!validInstancesIndicies.length) return null;
 
-    currentHandlers.devtool?.onCommitFinish();
-    currentHandlers.monitoring?.onCommitFinish();
-  };
+        const propsRender = getPropsChanges(fiber, type);
+        const stateRender = getStateRender(fiber, type);
+        const contextRender = getContextRender(fiber, type);
 
-  instrument({ onCommitFiberRoot });
+        if (!propsRender && !contextRender) return null;
 
-  instrumentation.onCommitFiberRoot = onCommitFiberRoot;
+        const renders: Array<Render> = [];
+        if (propsRender) {
+          renders.push(propsRender);
+        }
+        if (stateRender) {
+          renders.push(stateRender);
+        }
+        if (contextRender) {
+          renders.push(contextRender);
+        }
 
+        if (!propsRender && !contextRender && !stateRender) {
+          renders.push({
+            type: 'misc',
+            count: 1,
+            changes: [],
+            name: getDisplayName(type),
+            time: 0,
+            forget: false,
+          });
+        }
+        for (let i = 0, len = validInstancesIndicies.length; i < len; i++) {
+          const index = validInstancesIndicies[i];
+          const instance = allInstances[index];
+          instance.config.onRender(fiber, renders);
+        }
+      },
+      onError(error) {
+        const allInstances = getAllInstances();
+        for (const instance of allInstances) {
+          instance.config.onError(error);
+        }
+      },
+    });
+    instrument({
+      name: 'react-scan',
+      onCommitFiberRoot: (rendererID, root) => {
+        const allInstances = getAllInstances();
+        for (const instance of allInstances) {
+          instance.config.onCommitStart();
+        }
+        visitor(rendererID, root);
+        for (const instance of allInstances) {
+          instance.config.onCommitFinish();
+        }
+      },
+    });
+  }
   return instrumentation;
 };

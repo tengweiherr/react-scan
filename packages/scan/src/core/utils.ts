@@ -1,6 +1,6 @@
 import { type Fiber } from 'react-reconciler';
-import { getType, traverseFiber } from 'bippy';
-import { ignoredProps, ReactScanInternals } from '..';
+import { getType } from 'bippy';
+import { ReactScanInternals } from '..';
 import type { Render } from './instrumentation';
 
 export const getLabelText = (renders: Array<Render>) => {
@@ -10,7 +10,6 @@ export const getLabelText = (renders: Array<Render>) => {
     string,
     {
       count: number;
-      trigger: boolean;
       forget: boolean;
       time: number;
     }
@@ -21,15 +20,13 @@ export const getLabelText = (renders: Array<Render>) => {
     const name = render.name;
     if (!name?.trim()) continue;
 
-    const { count, trigger, forget, time } = components.get(name) ?? {
+    const { count, forget, time } = components.get(name) ?? {
       count: 0,
-      trigger: false,
       forget: false,
       time: 0,
     };
     components.set(name, {
       count: count + render.count,
-      trigger: trigger || render.trigger,
       forget: forget || render.forget,
       time: time + render.time,
     });
@@ -62,39 +59,6 @@ export const getLabelText = (renders: Array<Render>) => {
     labelText = `${labelText.slice(0, 40)}…`;
   }
   return labelText;
-};
-
-export const addFiberToSet = (fiber: Fiber, set: Set<Fiber>) => {
-  if (fiber.alternate && set.has(fiber.alternate)) {
-    // then the alternate tree fiber exists in the weakset, don't double count the instance
-    return;
-  }
-
-  set.add(fiber);
-};
-
-export const isValidFiber = (fiber: Fiber) => {
-  if (ignoredProps.has(fiber.memoizedProps)) {
-    return false;
-  }
-
-  const allowList = ReactScanInternals.componentAllowList;
-  const shouldAllow =
-    allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
-
-  if (shouldAllow) {
-    const parent = traverseFiber(
-      fiber,
-      (node) => {
-        const options =
-          allowList?.get(node.type) ?? allowList?.get(node.elementType);
-        return options?.includeChildren;
-      },
-      true,
-    );
-    if (!parent && !shouldAllow) return false;
-  }
-  return true;
 };
 
 export const updateFiberRenderData = (fiber: Fiber, renders: Array<Render>) => {

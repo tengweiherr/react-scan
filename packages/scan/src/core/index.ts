@@ -1,7 +1,13 @@
 import type { Fiber } from 'react-reconciler';
 import type * as React from 'react';
 import { type Signal, signal } from '@preact/signals';
-import { getDisplayName, getTimings, getType, isCompositeFiber } from 'bippy';
+import {
+  getDisplayName,
+  getTimings,
+  getType,
+  isCompositeFiber,
+  traverseFiber,
+} from 'bippy';
 import { createInstrumentation, type Render } from './instrumentation';
 import {
   type ActiveOutline,
@@ -18,11 +24,7 @@ import {
 import { createToolbar } from './web/toolbar';
 import type { InternalInteraction } from './monitor/types';
 import { type getSession } from './monitor/utils';
-import {
-  isValidFiber,
-  type RenderData,
-  updateFiberRenderData,
-} from './utils';
+import { type RenderData, updateFiberRenderData } from './utils';
 import { playGeigerClickSound } from './web/geiger';
 
 export interface Options {
@@ -275,6 +277,30 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
   }
 };
 
+export const isValidFiber = (fiber: Fiber) => {
+  if (ignoredProps.has(fiber.memoizedProps)) {
+    return false;
+  }
+
+  const allowList = ReactScanInternals.componentAllowList;
+  const shouldAllow =
+    allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
+
+  if (shouldAllow) {
+    const parent = traverseFiber(
+      fiber,
+      (node) => {
+        const options =
+          allowList?.get(node.type) ?? allowList?.get(node.elementType);
+        return options?.includeChildren;
+      },
+      true,
+    );
+    if (!parent && !shouldAllow) return false;
+  }
+  return true;
+};
+
 export const start = () => {
   if (typeof window === 'undefined') return;
   const options = ReactScanInternals.options.value;
@@ -304,14 +330,15 @@ export const start = () => {
   };
 
   // TODO: dynamic enable, and inspect-off check
-  const instrumentation = createInstrumentation({
-    kind: 'devtool',
+  const instrumentation = createInstrumentation('devtools', {
     onCommitStart() {
       ReactScanInternals.options.value.onCommitStart?.();
     },
-    isValidFiber(fiber) {
-      return isValidFiber(fiber);
+    onError(error) {
+      // eslint-disable-next-line no-console
+      console.error('[React Scan] Error instrumenting:', error);
     },
+    isValidFiber,
     onRender(fiber, renders) {
       if (ReactScanInternals.instrumentation?.isPaused.value) {
         // don't draw if it's paused
