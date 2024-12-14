@@ -9,7 +9,6 @@ import {
   getDisplayName,
   getType,
   isValidElement,
-  didFiberCommit,
   getMutatedHostFibers,
   getNearestHostFiber,
 } from 'bippy';
@@ -19,6 +18,7 @@ import { ReactScanInternals } from './index';
 let fps = 0;
 let lastTime = performance.now();
 let frameCount = 0;
+let initedFps = false;
 
 export const getFPS = () => {
   const updateFPS = () => {
@@ -32,9 +32,10 @@ export const getFPS = () => {
     requestAnimationFrame(updateFPS);
   };
 
-  if (!inited) {
-    inited = true;
+  if (!initedFps) {
+    initedFps = true;
     updateFPS();
+    fps = 60;
   }
 
   return fps;
@@ -52,33 +53,30 @@ const truncateFloat = (value: number, maxLen = 10000 /* 4 digits */) => {
 
 const THRESHOLD_FPS = 60;
 
-export const getFiberRenderScore = (fiber: Fiber) => {
+// const cachedMutatedHostFibers = new WeakMap<Fiber, Array<Fiber>>();
+export const getUnnecessaryScore = (fiber: Fiber) => {
   const hostFiber = getNearestHostFiber(fiber);
-  const hasMutation = didFiberCommit(fiber);
-  const mutatedHostFibers = getMutatedHostFibers(fiber);
-  const isVisible =
-    hostFiber &&
-    isElementVisible(hostFiber.stateNode) &&
-    isElementInViewport(hostFiber.stateNode);
+  if (!hostFiber) return 0;
+  const isVisible = isElementVisible(hostFiber.stateNode);
+  // const mutatedHostFibers =
+  //   cachedMutatedHostFibers.get(fiber) ?? getMutatedHostFibers(fiber);
+  // cachedMutatedHostFibers.set(fiber, mutatedHostFibers);
+  const unnecessaryScore = isVisible ? 0 : 1;
+  // for (const mutatedHostFiber of mutatedHostFibers) {
+  //   const node = mutatedHostFiber.stateNode;
+  //   if (!isElementVisible(node) || !isElementInViewport(node)) {
+  //     unnecessaryScore += 1 / mutatedHostFibers.length;
+  //   }
+  // }
+  return truncateFloat(unnecessaryScore);
+};
+
+export const getSlowScore = () => {
+  // TODO: add interaction check (if interaction occured, then rank it more important)
   const fps = getFPS();
-
-  let unnecessaryScore =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-    isVisible || mutatedHostFibers.length || hasMutation ? 0 : 1;
-  for (const mutatedHostFiber of mutatedHostFibers) {
-    const node = mutatedHostFiber.stateNode;
-    if (!isElementVisible(node) || !isElementInViewport(node)) {
-      unnecessaryScore += 1 / mutatedHostFibers.length;
-    }
-  }
-
-  return {
-    unnecessary: truncateFloat(unnecessaryScore),
-    slow:
-      fps < THRESHOLD_FPS
-        ? truncateFloat((THRESHOLD_FPS - fps) / THRESHOLD_FPS)
-        : 0,
-  };
+  return fps < THRESHOLD_FPS
+    ? truncateFloat((THRESHOLD_FPS - fps) / THRESHOLD_FPS)
+    : 0;
 };
 
 export const isElementVisible = (el: HTMLElement) => {
@@ -153,7 +151,7 @@ export interface Render {
   count: number;
   forget: boolean;
   changes: Array<Change> | null;
-  category: Category;
+  score: number;
 }
 
 const unstableTypes = ['function', 'object'];
@@ -204,11 +202,7 @@ export const fastSerialize = (value: unknown) => {
   }
 };
 
-export const getPropsChanges = (
-  fiber: Fiber,
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  type: Function,
-): Render | null => {
+export const getPropsChanges = (fiber: Fiber) => {
   const changes: Array<Change> = [];
 
   const prevProps = fiber.alternate?.memoizedProps;
@@ -226,6 +220,7 @@ export const getPropsChanges = (
       continue;
     }
     const change: Change = {
+      type: 'props',
       name: propName,
       prevValue,
       nextValue,
@@ -246,28 +241,17 @@ export const getPropsChanges = (
 
     change.unstable = true;
   }
-  const { selfTime } = getTimings(fiber);
 
-  return {
-    type: 'props',
-    count: 1,
-    changes,
-    name: getDisplayName(type),
-    time: selfTime,
-    forget: hasMemoCache(fiber),
-  };
+  return changes;
 };
 
-export const getStateRender = (
-  fiber: Fiber,
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  type: Function,
-): Render | null => {
+export const getStateChanges = (fiber: Fiber) => {
   const changes: Array<Change> = [];
 
   traverseState(fiber, (prevState, nextState) => {
     if (Object.is(prevState.memoizedState, nextState.memoizedState)) return;
     const change: Change = {
+      type: 'state',
       name: '',
       prevValue: prevState.memoizedState,
       nextValue: nextState.memoizedState,
@@ -276,30 +260,18 @@ export const getStateRender = (
     changes.push(change);
   });
 
-  const { selfTime } = getTimings(fiber);
-
-  return {
-    type: 'state',
-    count: 1,
-    changes,
-    name: getDisplayName(type),
-    time: selfTime,
-    forget: hasMemoCache(fiber),
-  };
+  return changes;
 };
 
-export const getContextRender = (
-  fiber: Fiber,
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  type: Function,
-): Render | null => {
+export const getContextChanges = (fiber: Fiber) => {
   const changes: Array<Change> = [];
 
-  const result = traverseContexts(fiber, (prevContext, nextContext) => {
+  traverseContexts(fiber, (prevContext, nextContext) => {
     const prevValue = prevContext.memoizedValue;
     const nextValue = nextContext.memoizedValue;
 
     const change: Change = {
+      type: 'context',
       name: '',
       prevValue,
       nextValue,
@@ -319,18 +291,7 @@ export const getContextRender = (
     }
   });
 
-  if (!result) return null;
-
-  const { selfTime } = getTimings(fiber);
-
-  return {
-    type: 'context',
-    count: 1,
-    changes,
-    name: getDisplayName(type),
-    time: selfTime,
-    forget: hasMemoCache(fiber),
-  };
+  return changes;
 };
 
 type OnRenderHandler = (fiber: Fiber, renders: Array<Render>) => void;
@@ -393,37 +354,31 @@ export const createInstrumentation = (
         }
         if (!validInstancesIndicies.length) return null;
 
-        const propsRender = getPropsChanges(fiber, type);
-        const stateRender = getStateRender(fiber, type);
-        const contextRender = getContextRender(fiber, type);
+        const changes: Array<Change> = [];
 
-        if (!propsRender && !contextRender) return null;
+        const propsChanges = getPropsChanges(fiber);
+        const stateChanges = getStateChanges(fiber);
+        const contextChanges = getContextChanges(fiber);
 
-        const renders: Array<Render> = [];
-        if (propsRender) {
-          renders.push(propsRender);
-        }
-        if (stateRender) {
-          renders.push(stateRender);
-        }
-        if (contextRender) {
-          renders.push(contextRender);
-        }
+        changes.push(...propsChanges);
+        changes.push(...stateChanges);
+        changes.push(...contextChanges);
 
-        if (!propsRender && !contextRender && !stateRender) {
-          renders.push({
-            type: 'misc',
-            count: 1,
-            changes: [],
-            name: getDisplayName(type),
-            time: 0,
-            forget: false,
-          });
-        }
+        const { selfTime } = getTimings(fiber);
+
+        const render: Render = {
+          componentName: getDisplayName(type),
+          count: 1,
+          changes,
+          time: selfTime,
+          forget: hasMemoCache(fiber),
+          score: (getSlowScore() + getUnnecessaryScore(fiber)) / 2,
+        };
+
         for (let i = 0, len = validInstancesIndicies.length; i < len; i++) {
           const index = validInstancesIndicies[i];
           const instance = allInstances[index];
-          instance.config.onRender(fiber, renders);
+          instance.config.onRender(fiber, [render]);
         }
       },
       onError(error) {

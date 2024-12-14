@@ -86,6 +86,7 @@ export interface Options {
    * Maximum number of renders for red indicator
    *
    * @default 20
+   * @deprecated
    */
   maxRenders?: number;
 
@@ -368,10 +369,10 @@ export const start = () => {
           playGeigerClickSound(audioContext, amplitude);
         }
       }
-      flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
       ReactScanInternals.options.value.onCommitFinish?.();
+      flushOutlines(ctx, new Map());
     },
   });
 

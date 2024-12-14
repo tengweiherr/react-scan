@@ -248,16 +248,15 @@ export const fadeOutOutline = (
   for (const activeOutline of Array.from(groupedOutlines.values())) {
     const { outline, frame, totalFrames } = activeOutline;
 
-    let count = 0;
-    let time = 0;
+    let totalScore = 0;
     for (let i = 0, len = outline.renders.length; i < len; i++) {
       const render = outline.renders[i];
-      count += render.count;
-      time += render.time;
+      totalScore += render.score;
     }
 
-    const maxRenders = ReactScanInternals.options.value.maxRenders ?? 100;
-    const t = Math.min((count * (time || 1)) / maxRenders, 1);
+    const averageScore = totalScore / outline.renders.length;
+
+    const t = Math.min(averageScore, 1);
 
     const r = Math.round(START_COLOR.r + t * (END_COLOR.r - START_COLOR.r));
     const g = Math.round(START_COLOR.g + t * (END_COLOR.g - START_COLOR.g));
@@ -277,26 +276,29 @@ export const fadeOutOutline = (
     //   );
     // }
     const { rect } = outline;
-    const unstable = isOutlineUnstable(outline);
+    // const unstable = isOutlineUnstable(outline);
+
+    // let hasBadScore = false;
 
     if (renderCountThreshold > 0) {
       let count = 0;
       for (let i = 0, len = outline.renders.length; i < len; i++) {
         const render = outline.renders[i];
         count += render.count;
+        // if (render.score >= 0.5) {
+        //   hasBadScore = true;
+        // }
       }
       if (count < renderCountThreshold) {
         continue;
       }
     }
 
-    const isImportant = unstable || options.alwaysShowLabels;
-
-    const alphaScalar = isImportant ? 0.8 : 0.2;
+    const alphaScalar = 0.8;
     activeOutline.alpha = alphaScalar * (1 - frame / totalFrames);
 
     const alpha = activeOutline.alpha;
-    const fillAlpha = isImportant ? activeOutline.alpha * 0.1 : 0;
+    const fillAlpha = activeOutline.alpha * 0.1;
 
     const rgb = `${color.r},${color.g},${color.b}`;
     ctx.strokeStyle = `rgba(${rgb},${alpha})`;
@@ -308,15 +310,15 @@ export const fadeOutOutline = (
     ctx.stroke();
     ctx.fill();
 
-    if (isImportant) {
-      const text = getLabelText(outline.renders);
-      pendingLabeledOutlines.push({
-        alpha,
-        outline,
-        text,
-        color,
-      });
-    }
+    // if (isImportant) {
+    const text = getLabelText(outline.renders);
+    pendingLabeledOutlines.push({
+      alpha,
+      outline,
+      text,
+      color,
+    });
+    // }
   }
 
   ctx.restore();

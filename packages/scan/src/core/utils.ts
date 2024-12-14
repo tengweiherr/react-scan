@@ -17,7 +17,7 @@ export const getLabelText = (renders: Array<Render>) => {
 
   for (let i = 0, len = renders.length; i < len; i++) {
     const render = renders[i];
-    const name = render.name;
+    const name = render.componentName;
     if (!name?.trim()) continue;
 
     const { count, forget, time } = components.get(name) ?? {
@@ -32,32 +32,58 @@ export const getLabelText = (renders: Array<Render>) => {
     });
   }
 
-  const sortedComponents = Array.from(components.entries()).sort(
-    ([, a], [, b]) => b.count - a.count,
+  const componentsByCount = new Map<
+    number,
+    Array<{ name: string; forget: boolean; time: number }>
+  >();
+
+  for (const [name, data] of Array.from(components.entries())) {
+    const { count, forget, time } = data;
+    if (!componentsByCount.has(count)) {
+      componentsByCount.set(count, []);
+    }
+    componentsByCount.get(count)!.push({ name, forget, time });
+  }
+
+  const sortedCounts = Array.from(componentsByCount.keys()).sort(
+    (a, b) => b - a,
   );
 
   const parts: Array<string> = [];
-  for (const [name, { count, forget, time }] of sortedComponents) {
-    let text = name;
+  let cumulativeTime = 0;
+  for (const count of sortedCounts) {
+    const componentGroup = componentsByCount.get(count)!;
+    const names = componentGroup.map(({ name }) => name).join(', ');
+    let text = names;
+
+    const totalTime = componentGroup.reduce((sum, { time }) => sum + time, 0);
+    const hasForget = componentGroup.some(({ forget }) => forget);
+
+    cumulativeTime += totalTime;
+
     if (count > 1) {
       text += ` ×${count}`;
     }
-    if (time >= 0.01 && count > 0) {
-      text += ` (${time.toFixed(2)}ms)`;
+
+    if (hasForget) {
+      text = `✨${text}`;
     }
 
-    if (forget) {
-      text = `${text} ✨`;
-    }
     parts.push(text);
   }
 
   labelText = parts.join(' ');
 
   if (!labelText.length) return null;
+
   if (labelText.length > 40) {
     labelText = `${labelText.slice(0, 40)}…`;
   }
+
+  if (cumulativeTime >= 0.01) {
+    labelText += ` (${cumulativeTime.toFixed(2)}ms)`;
+  }
+
   return labelText;
 };
 
