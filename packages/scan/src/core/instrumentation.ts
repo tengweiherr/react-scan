@@ -9,8 +9,9 @@ import {
   getDisplayName,
   getType,
   isValidElement,
-  getMutatedHostFibers,
   getNearestHostFiber,
+  didFiberCommit,
+  getMutatedHostFibers,
 } from 'bippy';
 import { type Signal, signal } from '@preact/signals';
 import { ReactScanInternals } from './index';
@@ -53,21 +54,22 @@ const truncateFloat = (value: number, maxLen = 10000 /* 4 digits */) => {
 
 const THRESHOLD_FPS = 60;
 
-// const cachedMutatedHostFibers = new WeakMap<Fiber, Array<Fiber>>();
 export const getUnnecessaryScore = (fiber: Fiber) => {
   const hostFiber = getNearestHostFiber(fiber);
   if (!hostFiber) return 0;
-  const isVisible = isElementVisible(hostFiber.stateNode);
-  // const mutatedHostFibers =
-  //   cachedMutatedHostFibers.get(fiber) ?? getMutatedHostFibers(fiber);
-  // cachedMutatedHostFibers.set(fiber, mutatedHostFibers);
-  const unnecessaryScore = isVisible ? 0 : 1;
-  // for (const mutatedHostFiber of mutatedHostFibers) {
-  //   const node = mutatedHostFiber.stateNode;
-  //   if (!isElementVisible(node) || !isElementInViewport(node)) {
-  //     unnecessaryScore += 1 / mutatedHostFibers.length;
-  //   }
-  // }
+  const isVisible =
+    isElementVisible(hostFiber.stateNode) && !didFiberCommit(fiber);
+
+  let unnecessaryScore = isVisible ? 0 : 1;
+  if (unnecessaryScore === 0) {
+    const mutatedHostFibers = getMutatedHostFibers(fiber);
+    for (const mutatedHostFiber of mutatedHostFibers) {
+      const node = mutatedHostFiber.stateNode;
+      if (!isElementVisible(node) || didFiberCommit(node)) {
+        unnecessaryScore += 1 / mutatedHostFibers.length;
+      }
+    }
+  }
   return truncateFloat(unnecessaryScore);
 };
 
@@ -146,6 +148,7 @@ export interface Change {
 export type Category = 'slow' | 'unnecessary' | 'offscreen';
 
 export interface Render {
+  phase: string;
   componentName: string | null;
   time: number;
   count: number;
@@ -341,7 +344,7 @@ export const createInstrumentation = (
   if (!inited) {
     inited = true;
     const visitor = createFiberVisitor({
-      onRender(fiber) {
+      onRender(fiber, phase) {
         const type = getType(fiber.type);
         if (!type) return null;
 
@@ -367,12 +370,13 @@ export const createInstrumentation = (
         const { selfTime } = getTimings(fiber);
 
         const render: Render = {
+          phase,
           componentName: getDisplayName(type),
           count: 1,
           changes,
           time: selfTime,
           forget: hasMemoCache(fiber),
-          score: (getSlowScore() + getUnnecessaryScore(fiber)) / 2,
+          score: getSlowScore(),
         };
 
         for (let i = 0, len = validInstancesIndicies.length; i < len; i++) {

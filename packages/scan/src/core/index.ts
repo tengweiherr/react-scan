@@ -15,7 +15,7 @@ import {
   getOutline,
   type PendingOutline,
 } from './web/outline';
-import { logIntro } from './web/log';
+import { log, logIntro } from './web/log';
 import { initReactScanOverlay } from './web/overlay';
 import {
   createInspectElementStateMachine,
@@ -351,6 +351,10 @@ export const start = () => {
         reportRender(fiber, renders);
       }
 
+      if (ReactScanInternals.options.value.log) {
+        log(renders);
+      }
+
       ReactScanInternals.options.value.onRender?.(fiber, renders);
 
       for (let i = 0, len = renders.length; i < len; i++) {
@@ -369,10 +373,10 @@ export const start = () => {
           playGeigerClickSound(audioContext, amplitude);
         }
       }
+      flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
       ReactScanInternals.options.value.onCommitFinish?.();
-      flushOutlines(ctx, new Map());
     },
   });
 

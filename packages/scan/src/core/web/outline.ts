@@ -1,5 +1,5 @@
 import { type Fiber } from 'react-reconciler';
-import { getNearestHostFiber } from 'bippy';
+import { didFiberCommit, getNearestHostFiber } from 'bippy';
 import type { Render } from '../instrumentation';
 import { ReactScanInternals } from '../index';
 import { getLabelText } from '../utils';
@@ -9,6 +9,7 @@ export interface PendingOutline {
   rect: DOMRect;
   domNode: HTMLElement;
   renders: Array<Render>;
+  didCommit: boolean;
 }
 
 export interface ActiveOutline {
@@ -23,8 +24,8 @@ export interface ActiveOutline {
 export interface OutlineLabel {
   alpha: number;
   outline: PendingOutline;
-  text: string | null;
   color: { r: number; g: number; b: number };
+  reasons: Array<'unstable' | 'commit'>;
 }
 
 export const MONO_FONT =
@@ -105,6 +106,7 @@ export const getOutline = (
     rect,
     domNode,
     renders: [render],
+    didCommit: didFiberCommit(fiber),
   };
 };
 
@@ -249,12 +251,19 @@ export const fadeOutOutline = (
     const { outline, frame, totalFrames } = activeOutline;
 
     let totalScore = 0;
+    let totalTime = 0;
+    let totalCount = 0;
     for (let i = 0, len = outline.renders.length; i < len; i++) {
       const render = outline.renders[i];
       totalScore += render.score;
+      totalTime += render.time;
+      totalCount += render.count;
     }
 
-    const averageScore = totalScore / outline.renders.length;
+    const averageScore = Math.max(
+      totalScore / outline.renders.length,
+      totalTime / totalCount / 16, // long task
+    );
 
     const t = Math.min(averageScore, 1);
 
@@ -310,21 +319,38 @@ export const fadeOutOutline = (
     ctx.stroke();
     ctx.fill();
 
-    // if (isImportant) {
-    const text = getLabelText(outline.renders);
-    pendingLabeledOutlines.push({
-      alpha,
-      outline,
-      text,
-      color,
-    });
-    // }
+    const phases = new Set(outline.renders.map((r) => r.phase));
+
+    const reasons: Array<'unstable' | 'commit'> = [];
+    if (outline.didCommit) {
+      reasons.push('commit');
+    }
+    if (isOutlineUnstable(outline)) {
+      reasons.push('unstable');
+    }
+
+    if (
+      reasons.length &&
+      getLabelText(outline.renders) &&
+      !(phases.has('mount') && phases.size === 1)
+    ) {
+      pendingLabeledOutlines.push({
+        alpha,
+        outline,
+        color,
+        reasons,
+      });
+    }
   }
 
   ctx.restore();
 
   for (let i = 0, len = pendingLabeledOutlines.length; i < len; i++) {
-    const { alpha, outline, text, color } = pendingLabeledOutlines[i];
+    const { alpha, outline, color, reasons } = pendingLabeledOutlines[i];
+    const labelText = getLabelText(outline.renders);
+    const text = reasons.includes('unstable')
+      ? `⚠️${labelText}`
+      : `${labelText}`;
     const { rect } = outline;
     ctx.save();
 

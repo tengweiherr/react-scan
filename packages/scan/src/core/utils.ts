@@ -18,6 +18,7 @@ export const getLabelText = (renders: Array<Render>) => {
   for (let i = 0, len = renders.length; i < len; i++) {
     const render = renders[i];
     const name = render.componentName;
+
     if (!name?.trim()) continue;
 
     const { count, forget, time } = components.get(name) ?? {
@@ -72,7 +73,7 @@ export const getLabelText = (renders: Array<Render>) => {
     parts.push(text);
   }
 
-  labelText = parts.join(' ');
+  labelText = parts.join(', ');
 
   if (!labelText.length) return null;
 
@@ -81,7 +82,7 @@ export const getLabelText = (renders: Array<Render>) => {
   }
 
   if (cumulativeTime >= 0.01) {
-    labelText += ` (${cumulativeTime.toFixed(2)}ms)`;
+    labelText += ` (${Number(cumulativeTime.toFixed(2))}ms)`;
   }
 
   return labelText;
