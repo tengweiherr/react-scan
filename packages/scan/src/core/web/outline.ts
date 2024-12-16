@@ -1,6 +1,10 @@
 import { type Fiber } from 'react-reconciler';
 import { didFiberCommit, getNearestHostFiber } from 'bippy';
-import type { Render } from '../instrumentation';
+import {
+  isElementInViewport,
+  isElementVisible,
+  type Render,
+} from '../instrumentation';
 import { ReactScanInternals } from '../index';
 import { getLabelText } from '../utils';
 import { isOutlineUnstable, throttle } from './utils';
@@ -41,36 +45,24 @@ export const getOutlineKey = (outline: PendingOutline): string => {
 
 const rectCache = new Map<Element, { rect: DOMRect; timestamp: number }>();
 
-export const getRect = (domNode: Element): DOMRect | null => {
+export const getRect = (el: Element): DOMRect | null => {
   const now = performance.now();
-  const cached = rectCache.get(domNode);
+  const cached = rectCache.get(el);
 
   if (cached && now - cached.timestamp < DEFAULT_THROTTLE_TIME) {
     return cached.rect;
   }
 
-  const style = window.getComputedStyle(domNode);
-  if (
-    style.display === 'none' ||
-    style.visibility === 'hidden' ||
-    style.opacity === '0'
-  ) {
+  if (!isElementVisible(el)) {
     return null;
   }
 
-  const rect = domNode.getBoundingClientRect();
-
-  const isVisible =
-    rect.bottom > 0 &&
-    rect.right > 0 &&
-    rect.top < window.innerHeight &&
-    rect.left < window.innerWidth;
-
-  if (!isVisible || !rect.width || !rect.height) {
+  const rect = el.getBoundingClientRect();
+  if (!isElementInViewport(el, rect)) {
     return null;
   }
 
-  rectCache.set(domNode, { rect, timestamp: now });
+  rectCache.set(el, { rect, timestamp: now });
 
   return rect;
 };

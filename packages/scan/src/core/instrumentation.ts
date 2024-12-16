@@ -73,15 +73,7 @@ export const getUnnecessaryScore = (fiber: Fiber) => {
   return truncateFloat(unnecessaryScore);
 };
 
-export const getSlowScore = () => {
-  // TODO: add interaction check (if interaction occured, then rank it more important)
-  const fps = getFPS();
-  return fps < THRESHOLD_FPS
-    ? truncateFloat((THRESHOLD_FPS - fps) / THRESHOLD_FPS)
-    : 0;
-};
-
-export const isElementVisible = (el: HTMLElement) => {
+export const isElementVisible = (el: Element) => {
   const style = window.getComputedStyle(el);
   return (
     style.display !== 'none' &&
@@ -91,50 +83,17 @@ export const isElementVisible = (el: HTMLElement) => {
   );
 };
 
-let initedEventListeners = false;
-let scrollX: number | null = null;
-let scrollY: number | null = null;
-let innerWidth: number | null = null;
-let innerHeight: number | null = null;
+export const isElementInViewport = (
+  el: Element,
+  rect = el.getBoundingClientRect(),
+) => {
+  const isVisible =
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < window.innerHeight &&
+    rect.left < window.innerWidth;
 
-export const getWindowDimensions = () => {
-  if (scrollX === null) scrollX = window.scrollX;
-  if (scrollY === null) scrollY = window.scrollY;
-  if (innerWidth === null) innerWidth = window.innerWidth;
-  if (innerHeight === null) innerHeight = window.innerHeight;
-
-  if (!initedEventListeners) {
-    initedEventListeners = true;
-    const handleResize = () => {
-      scrollX = null;
-      scrollY = null;
-      innerWidth = null;
-      innerHeight = null;
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('scroll', handleResize);
-  }
-  return {
-    top: scrollY,
-    left: scrollX,
-    right: scrollX + innerWidth,
-    bottom: scrollY + innerHeight,
-  };
-};
-
-export const isElementInViewport = (el: HTMLElement) => {
-  const elTop = el.offsetTop;
-  const elLeft = el.offsetLeft;
-  const elWidth = el.offsetWidth;
-  const elHeight = el.offsetHeight;
-  const { top, left, right, bottom } = getWindowDimensions();
-
-  return (
-    elTop + elHeight > top &&
-    elLeft + elWidth > left &&
-    elTop < bottom &&
-    elLeft < right
-  );
+  return isVisible && rect.width && rect.height;
 };
 
 export interface Change {
@@ -363,11 +322,39 @@ export const createInstrumentation = (
         const stateChanges = getStateChanges(fiber);
         const contextChanges = getContextChanges(fiber);
 
-        changes.push(...propsChanges);
-        changes.push(...stateChanges);
-        changes.push(...contextChanges);
+        for (let i = 0, len = propsChanges.length; i < len; i++) {
+          const change = propsChanges[i];
+          changes.push(change);
+        }
+        for (let i = 0, len = stateChanges.length; i < len; i++) {
+          const change = stateChanges[i];
+          changes.push(change);
+        }
+        for (let i = 0, len = contextChanges.length; i < len; i++) {
+          const change = contextChanges[i];
+          changes.push(change);
+        }
 
         const { selfTime } = getTimings(fiber);
+
+        let totalScore = 0;
+        let scoreCount = 0;
+
+        if (fiber.actualDuration !== undefined) {
+          totalScore += Math.min(
+            1,
+            selfTime / (didFiberCommit(fiber) ? 16 : 8),
+          );
+          scoreCount++;
+        }
+
+        const fps = getFPS();
+        const fpsScore =
+          fps < THRESHOLD_FPS
+            ? truncateFloat((THRESHOLD_FPS - fps) / THRESHOLD_FPS)
+            : 0;
+        totalScore += fpsScore;
+        scoreCount++;
 
         const render: Render = {
           phase,
@@ -376,7 +363,7 @@ export const createInstrumentation = (
           changes,
           time: selfTime,
           forget: hasMemoCache(fiber),
-          score: getSlowScore(),
+          score: totalScore / scoreCount,
         };
 
         for (let i = 0, len = validInstancesIndicies.length; i < len; i++) {
