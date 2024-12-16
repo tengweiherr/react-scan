@@ -274,6 +274,7 @@ let inited = false;
 
 const getAllInstances = () => Array.from(instrumentationInstances.values());
 
+// FIXME: calculation is slow
 export const isRenderUnnecessary = (fiber: Fiber) => {
   if (!didFiberCommit(fiber)) return true;
 

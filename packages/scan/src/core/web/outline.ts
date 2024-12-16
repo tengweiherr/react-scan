@@ -459,7 +459,8 @@ async function paintOutlines(
   });
 }
 
-const mergeOverlappingLabels = (
+// FIXME: slow
+export const mergeOverlappingLabels = (
   labels: Array<OutlineLabel>,
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
 ): Array<OutlineLabel> => {
@@ -526,8 +527,7 @@ const mergeOverlappingLabels = (
   return mergedLabels;
 };
 
-// Helper function to get the bounding rectangle of a label
-const getLabelRect = (
+export const getLabelRect = (
   label: OutlineLabel,
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
 ): DOMRect => {
@@ -544,10 +544,9 @@ const getLabelRect = (
   return new DOMRect(labelX, labelY, textWidth + 4, textHeight + 4);
 };
 
-// Add a cache for text measurements
 const textMeasurementCache = new Map<string, TextMetrics>();
 
-const measureTextCached = (
+export const measureTextCached = (
   text: string,
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
 ): TextMetrics => {
@@ -560,8 +559,7 @@ const measureTextCached = (
   return metrics;
 };
 
-// Helper function to calculate overlap area
-function getOverlapArea(rect1: DOMRect, rect2: DOMRect): number {
+export const getOverlapArea = (rect1: DOMRect, rect2: DOMRect): number => {
   const xOverlap = Math.max(
     0,
     Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left),
@@ -571,15 +569,14 @@ function getOverlapArea(rect1: DOMRect, rect2: DOMRect): number {
     Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top),
   );
   return xOverlap * yOverlap;
-}
+};
 
-// Helper function to determine the outermost outline based on area
-function getOutermostOutline(
+export const getOutermostOutline = (
   outline1: PendingOutline,
   outline2: PendingOutline,
-): PendingOutline {
+): PendingOutline => {
   const area1 = outline1.rect.width * outline1.rect.height;
   const area2 = outline2.rect.width * outline2.rect.height;
 
   return area1 >= area2 ? outline1 : outline2;
-}
+};
