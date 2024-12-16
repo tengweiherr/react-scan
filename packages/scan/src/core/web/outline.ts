@@ -290,7 +290,43 @@ export const fadeOutOutline = (
     const g = Math.round(START_COLOR.g + t * (END_COLOR.g - START_COLOR.g));
     const b = Math.round(START_COLOR.b + t * (END_COLOR.b - START_COLOR.b));
 
-    const color = { r, g, b };
+    let color = { r, g, b };
+
+    const phases = new Set();
+
+    const reasons: Array<'unstable' | 'commit' | 'unnecessary'> = [];
+
+    let didCommit = false;
+    let isUnstable = false;
+    let isUnnecessary = false;
+    for (let i = 0, len = outline.renders.length; i < len; i++) {
+      const render = outline.renders[i];
+      phases.add(render.phase);
+      if (render.didCommit) {
+        didCommit = true;
+      }
+      for (let j = 0, len2 = render.changes?.length ?? 0; j < len2; j++) {
+        const change = render.changes![j];
+        if (change.unstable) {
+          isUnstable = true;
+        }
+      }
+      if (render.unnecessary) {
+        isUnnecessary = true;
+      }
+    }
+    if (didCommit) {
+      reasons.push('commit');
+    }
+    if (isUnstable) {
+      reasons.push('unstable');
+    }
+    if (isUnnecessary) {
+      reasons.push('unnecessary');
+      if (reasons.length === 1) {
+        color = { r: 128, g: 128, b: 128 };
+      }
+    }
 
     // const _totalTime = getMainThreadTaskTime();
     // if (totalTime) {
@@ -338,39 +374,6 @@ export const fadeOutOutline = (
     ctx.stroke();
     ctx.fill();
 
-    const phases = new Set();
-
-    const reasons: Array<'unstable' | 'commit' | 'unnecessary'> = [];
-
-    let didCommit = false;
-    let isUnstable = false;
-    let isUnnecessary = false;
-    for (let i = 0, len = outline.renders.length; i < len; i++) {
-      const render = outline.renders[i];
-      phases.add(render.phase);
-      if (render.didCommit) {
-        didCommit = true;
-      }
-      for (let j = 0, len2 = render.changes?.length ?? 0; j < len2; j++) {
-        const change = render.changes![j];
-        if (change.unstable) {
-          isUnstable = true;
-        }
-      }
-      if (render.unnecessary) {
-        isUnnecessary = true;
-      }
-    }
-    if (didCommit) {
-      reasons.push('commit');
-    }
-    if (isUnstable) {
-      reasons.push('unstable');
-    }
-    if (isUnnecessary) {
-      reasons.push('unnecessary');
-    }
-
     if (
       reasons.length &&
       getLabelText(outline.renders) &&
@@ -387,7 +390,6 @@ export const fadeOutOutline = (
 
   ctx.restore();
 
-  // Merge overlapping labels to the "outermost" label
   const mergedLabels = mergeOverlappingLabels(pendingLabeledOutlines, ctx);
 
   for (let i = 0, len = mergedLabels.length; i < len; i++) {
