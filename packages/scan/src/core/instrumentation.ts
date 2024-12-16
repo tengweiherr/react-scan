@@ -9,9 +9,9 @@ import {
   getDisplayName,
   getType,
   isValidElement,
-  getNearestHostFiber,
   didFiberCommit,
   getMutatedHostFibers,
+  traverseProps,
 } from 'bippy';
 import { type Signal, signal } from '@preact/signals';
 import { ReactScanInternals } from './index';
@@ -42,36 +42,15 @@ export const getFPS = () => {
   return fps;
 };
 
-const truncateFloat = (value: number, maxLen = 10000 /* 4 digits */) => {
-  if (
-    typeof value === 'number' &&
-    parseInt(value as any) !== value /* float check */
-  ) {
-    value = ~~(value * maxLen) / maxLen;
-  }
-  return value;
-};
-
-const THRESHOLD_FPS = 60;
-
-export const getUnnecessaryScore = (fiber: Fiber) => {
-  const hostFiber = getNearestHostFiber(fiber);
-  if (!hostFiber) return 0;
-  const isVisible =
-    isElementVisible(hostFiber.stateNode) && !didFiberCommit(fiber);
-
-  let unnecessaryScore = isVisible ? 0 : 1;
-  if (unnecessaryScore === 0) {
-    const mutatedHostFibers = getMutatedHostFibers(fiber);
-    for (const mutatedHostFiber of mutatedHostFibers) {
-      const node = mutatedHostFiber.stateNode;
-      if (!isElementVisible(node) || didFiberCommit(node)) {
-        unnecessaryScore += 1 / mutatedHostFibers.length;
-      }
-    }
-  }
-  return truncateFloat(unnecessaryScore);
-};
+// const truncateFloat = (value: number, maxLen = 10000 /* 4 digits */) => {
+//   if (
+//     typeof value === 'number' &&
+//     parseInt(value as any) !== value /* float check */
+//   ) {
+//     value = ~~(value * maxLen) / maxLen;
+//   }
+//   return value;
+// };
 
 export const isElementVisible = (el: Element) => {
   const style = window.getComputedStyle(el);
@@ -80,6 +59,16 @@ export const isElementVisible = (el: Element) => {
     style.visibility !== 'hidden' &&
     style.contentVisibility !== 'hidden' &&
     style.opacity !== '0'
+  );
+};
+
+export const isValueUnstable = (prevValue: unknown, nextValue: unknown) => {
+  const prevValueString = fastSerialize(prevValue);
+  const nextValueString = fastSerialize(nextValue);
+  return (
+    prevValueString === nextValueString &&
+    unstableTypes.includes(typeof prevValue) &&
+    unstableTypes.includes(typeof nextValue)
   );
 };
 
@@ -104,21 +93,24 @@ export interface Change {
   unstable: boolean;
 }
 
-export type Category = 'slow' | 'unnecessary' | 'offscreen';
+export type Category = 'commit' | 'unstable' | 'unnecessary';
 
 export interface Render {
   phase: string;
   componentName: string | null;
-  time: number;
+  time: number | null;
   count: number;
   forget: boolean;
   changes: Array<Change> | null;
-  score: number;
+  unnecessary: boolean;
+  didCommit: boolean;
+  fps: number;
 }
 
 const unstableTypes = ['function', 'object'];
 
-export const fastSerialize = (value: unknown) => {
+export const fastSerialize = (value: unknown, depth = 1) => {
+  if (depth < 0) return '…';
   switch (typeof value) {
     case 'function':
       return value.toString();
@@ -129,12 +121,12 @@ export const fastSerialize = (value: unknown) => {
         return 'null';
       }
       if (Array.isArray(value)) {
-        return value.length > 0 ? '[…]' : '[]';
+        return `[${value.map((item): string => fastSerialize(item, depth - 1)).join(', ')}]`;
       }
       if (isValidElement(value)) {
         // attempt to extract some name from the component
-        return `<${getDisplayName(value.type) ?? ''}${
-          Object.keys(value.props || {}).length > 0 ? ' …' : ''
+        return `<${getDisplayName(value.type) ?? ''} ${
+          Object.keys(value.props || {}).length
         }>`;
       }
       if (
@@ -144,7 +136,12 @@ export const fastSerialize = (value: unknown) => {
       ) {
         for (const key in value) {
           if (Object.prototype.hasOwnProperty.call(value, key)) {
-            return '{…}';
+            return `{${Object.keys(value)
+              .map(
+                (key): string =>
+                  `${key}:${fastSerialize((value as Record<string, unknown>)[key], depth - 1)}`,
+              )
+              .join(',')}}`;
           }
         }
         return '{}';
@@ -190,18 +187,9 @@ export const getPropsChanges = (fiber: Fiber) => {
     };
     changes.push(change);
 
-    const prevValueString = fastSerialize(prevValue);
-    const nextValueString = fastSerialize(nextValue);
-
-    if (
-      !unstableTypes.includes(typeof prevValue) ||
-      !unstableTypes.includes(typeof nextValue) ||
-      prevValueString !== nextValueString
-    ) {
-      continue;
+    if (isValueUnstable(prevValue, nextValue)) {
+      change.unstable = true;
     }
-
-    change.unstable = true;
   }
 
   return changes;
@@ -286,6 +274,25 @@ let inited = false;
 
 const getAllInstances = () => Array.from(instrumentationInstances.values());
 
+export const isRenderUnnecessary = (fiber: Fiber) => {
+  if (!didFiberCommit(fiber)) return true;
+
+  const mutatedHostFibers = getMutatedHostFibers(fiber);
+  for (const mutatedHostFiber of mutatedHostFibers) {
+    let isRequiredChange = false;
+    traverseProps(mutatedHostFiber, (prevValue, nextValue) => {
+      if (
+        !Object.is(prevValue, nextValue) &&
+        !isValueUnstable(prevValue, nextValue)
+      ) {
+        isRequiredChange = true;
+      }
+    });
+    if (isRequiredChange) return false;
+  }
+  return true;
+};
+
 export const createInstrumentation = (
   instanceKey: string,
   config: InstrumentationConfig,
@@ -337,24 +344,7 @@ export const createInstrumentation = (
 
         const { selfTime } = getTimings(fiber);
 
-        let totalScore = 0;
-        let scoreCount = 0;
-
-        if (fiber.actualDuration !== undefined) {
-          totalScore += Math.min(
-            1,
-            selfTime / (didFiberCommit(fiber) ? 16 : 8),
-          );
-          scoreCount++;
-        }
-
         const fps = getFPS();
-        const fpsScore =
-          fps < THRESHOLD_FPS
-            ? truncateFloat((THRESHOLD_FPS - fps) / THRESHOLD_FPS)
-            : 0;
-        totalScore += fpsScore;
-        scoreCount++;
 
         const render: Render = {
           phase,
@@ -363,7 +353,9 @@ export const createInstrumentation = (
           changes,
           time: selfTime,
           forget: hasMemoCache(fiber),
-          score: totalScore / scoreCount,
+          unnecessary: isRenderUnnecessary(fiber),
+          didCommit: didFiberCommit(fiber),
+          fps,
         };
 
         for (let i = 0, len = validInstancesIndicies.length; i < len; i++) {

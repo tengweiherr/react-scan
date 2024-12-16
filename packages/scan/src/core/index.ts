@@ -368,7 +368,8 @@ export const start = () => {
           const renderTimeThreshold = 10;
           const amplitude = Math.min(
             1,
-            (render.time - renderTimeThreshold) / (renderTimeThreshold * 2),
+            ((render.time ?? 0) - renderTimeThreshold) /
+              (renderTimeThreshold * 2),
           );
           playGeigerClickSound(audioContext, amplitude);
         }

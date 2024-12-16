@@ -1,5 +1,5 @@
 import { type Fiber } from 'react-reconciler';
-import { didFiberCommit, getNearestHostFiber } from 'bippy';
+import { getNearestHostFiber } from 'bippy';
 import {
   isElementInViewport,
   isElementVisible,
@@ -7,13 +7,12 @@ import {
 } from '../instrumentation';
 import { ReactScanInternals } from '../index';
 import { getLabelText } from '../utils';
-import { isOutlineUnstable, throttle } from './utils';
+import { throttle } from './utils';
 
 export interface PendingOutline {
   rect: DOMRect;
   domNode: HTMLElement;
   renders: Array<Render>;
-  didCommit: boolean;
 }
 
 export interface ActiveOutline {
@@ -29,7 +28,7 @@ export interface OutlineLabel {
   alpha: number;
   outline: PendingOutline;
   color: { r: number; g: number; b: number };
-  reasons: Array<'unstable' | 'commit'>;
+  reasons: Array<'unstable' | 'commit' | 'unnecessary'>;
 }
 
 export const MONO_FONT =
@@ -98,7 +97,6 @@ export const getOutline = (
     rect,
     domNode,
     renders: [render],
-    didCommit: didFiberCommit(fiber),
   };
 };
 
@@ -222,10 +220,8 @@ export const fadeOutOutline = (
     activeOutline.frame++;
 
     const progress = activeOutline.frame / activeOutline.totalFrames;
-    const isImportant =
-      isOutlineUnstable(activeOutline.outline) || options.alwaysShowLabels;
 
-    const alphaScalar = isImportant ? 0.8 : 0.2;
+    const alphaScalar = 0.8;
     activeOutline.alpha = alphaScalar * (1 - progress);
 
     if (activeOutline.frame >= activeOutline.totalFrames) {
@@ -242,18 +238,21 @@ export const fadeOutOutline = (
   for (const activeOutline of Array.from(groupedOutlines.values())) {
     const { outline, frame, totalFrames } = activeOutline;
 
-    let totalScore = 0;
     let totalTime = 0;
     let totalCount = 0;
+    let totalFps = 0;
     for (let i = 0, len = outline.renders.length; i < len; i++) {
       const render = outline.renders[i];
-      totalScore += render.score;
-      totalTime += render.time;
+      totalTime += render.time ?? 0;
       totalCount += render.count;
+      totalFps += render.fps;
     }
 
+    const THRESHOLD_FPS = 60;
     const averageScore = Math.max(
-      totalScore / outline.renders.length,
+      (THRESHOLD_FPS -
+        Math.min(totalFps / outline.renders.length, THRESHOLD_FPS)) /
+        THRESHOLD_FPS,
       totalTime / totalCount / 16, // long task
     );
 
@@ -311,14 +310,37 @@ export const fadeOutOutline = (
     ctx.stroke();
     ctx.fill();
 
-    const phases = new Set(outline.renders.map((r) => r.phase));
+    const phases = new Set();
 
-    const reasons: Array<'unstable' | 'commit'> = [];
-    if (outline.didCommit) {
+    const reasons: Array<'unstable' | 'commit' | 'unnecessary'> = [];
+
+    let didCommit = false;
+    let isUnstable = false;
+    let isUnnecessary = false;
+    for (let i = 0, len = outline.renders.length; i < len; i++) {
+      const render = outline.renders[i];
+      phases.add(render.phase);
+      if (render.didCommit) {
+        didCommit = true;
+      }
+      for (let j = 0, len2 = render.changes?.length ?? 0; j < len2; j++) {
+        const change = render.changes![j];
+        if (change.unstable) {
+          isUnstable = true;
+        }
+      }
+      if (render.unnecessary) {
+        isUnnecessary = true;
+      }
+    }
+    if (didCommit) {
       reasons.push('commit');
     }
-    if (isOutlineUnstable(outline)) {
+    if (isUnstable) {
       reasons.push('unstable');
+    }
+    if (isUnnecessary) {
+      reasons.push('unnecessary');
     }
 
     if (
@@ -340,9 +362,11 @@ export const fadeOutOutline = (
   for (let i = 0, len = pendingLabeledOutlines.length; i < len; i++) {
     const { alpha, outline, color, reasons } = pendingLabeledOutlines[i];
     const labelText = getLabelText(outline.renders);
-    const text = reasons.includes('unstable')
-      ? `⚠️${labelText}`
-      : `${labelText}`;
+    const text =
+      reasons.includes('unstable') &&
+      (reasons.includes('commit') || reasons.includes('unnecessary'))
+        ? `⚠️${labelText}`
+        : `${labelText}`;
     const { rect } = outline;
     ctx.save();
 

@@ -29,7 +29,7 @@ export const getLabelText = (renders: Array<Render>) => {
     components.set(name, {
       count: count + render.count,
       forget: forget || render.forget,
-      time: time + render.time,
+      time: time + (render.time ?? 0),
     });
   }
 
@@ -99,7 +99,7 @@ export const updateFiberRenderData = (fiber: Fiber, renders: Array<Render>) => {
     }) as RenderData;
     const firstRender = renders[0];
     renderData.count += firstRender.count;
-    renderData.time += firstRender.time;
+    renderData.time += firstRender.time ?? 0;
     renderData.renders.push(firstRender);
     type.renderData = renderData;
   }

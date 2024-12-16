@@ -77,7 +77,6 @@ export const TaskItem = ({ task, onDelete }) => {
 };
 
 export const Text = ({ children }) => {
-  console.log('Text', children);
   return <span>{children}</span>;
 };
 
