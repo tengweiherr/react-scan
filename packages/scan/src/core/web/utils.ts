@@ -1,5 +1,3 @@
-import { type PendingOutline } from './outline';
-
 export const onIdle = (callback: () => void) => {
   if ('scheduler' in globalThis) {
     return globalThis.scheduler.postTask(callback, {
