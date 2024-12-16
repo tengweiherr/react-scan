@@ -21,18 +21,18 @@ let lastTime = performance.now();
 let frameCount = 0;
 let initedFps = false;
 
-export const getFPS = () => {
-  const updateFPS = () => {
-    frameCount++;
-    const now = performance.now();
-    if (now - lastTime >= 1000) {
-      fps = frameCount;
-      frameCount = 0;
-      lastTime = now;
-    }
-    requestAnimationFrame(updateFPS);
-  };
+const updateFPS = () => {
+  frameCount++;
+  const now = performance.now();
+  if (now - lastTime >= 1000) {
+    fps = frameCount;
+    frameCount = 0;
+    lastTime = now;
+  }
+  requestAnimationFrame(updateFPS);
+};
 
+export const getFPS = () => {
   if (!initedFps) {
     initedFps = true;
     updateFPS();
@@ -41,16 +41,6 @@ export const getFPS = () => {
 
   return fps;
 };
-
-// const truncateFloat = (value: number, maxLen = 10000 /* 4 digits */) => {
-//   if (
-//     typeof value === 'number' &&
-//     parseInt(value as any) !== value /* float check */
-//   ) {
-//     value = ~~(value * maxLen) / maxLen;
-//   }
-//   return value;
-// };
 
 export const isElementVisible = (el: Element) => {
   const style = window.getComputedStyle(el);
@@ -121,7 +111,7 @@ export const fastSerialize = (value: unknown, depth = 0) => {
         return 'null';
       }
       if (Array.isArray(value)) {
-        return `[...]`;
+        return value.length > 0 ? `[${value.length}]` : '[]';
       }
       if (isValidElement(value)) {
         // attempt to extract some name from the component
@@ -136,12 +126,7 @@ export const fastSerialize = (value: unknown, depth = 0) => {
       ) {
         for (const key in value) {
           if (Object.prototype.hasOwnProperty.call(value, key)) {
-            return `{${Object.keys(value)
-              .map(
-                (key): string =>
-                  `${key}:${fastSerialize((value as Record<string, unknown>)[key], depth - 1)}`,
-              )
-              .join(',')}}`;
+            return `{${Object.keys(value).length}}`;
           }
         }
         return '{}';
