@@ -1,10 +1,6 @@
 import { type Fiber } from 'react-reconciler';
 import { getNearestHostFiber } from 'bippy';
-import {
-  isElementInViewport,
-  isElementVisible,
-  type Render,
-} from '../instrumentation';
+import { isElementInViewport, type Render } from '../instrumentation';
 import { ReactScanInternals } from '../index';
 import { getLabelText } from '../utils';
 import { throttle } from './utils';
@@ -42,18 +38,27 @@ export const getOutlineKey = (outline: PendingOutline): string => {
   return `${outline.rect.top}-${outline.rect.left}-${outline.rect.width}-${outline.rect.height}`;
 };
 
-const rectCache = new Map<Element, { rect: DOMRect; timestamp: number }>();
+let currentFrameId = 0;
+
+function incrementFrameId() {
+  currentFrameId++;
+  requestAnimationFrame(incrementFrameId);
+}
+
+incrementFrameId();
+
+interface CachedRect {
+  rect: DOMRect;
+  frameId: number;
+}
+
+const rectCache = new Map<Element, CachedRect>();
 
 export const getRect = (el: Element): DOMRect | null => {
-  const now = performance.now();
   const cached = rectCache.get(el);
 
-  if (cached && now - cached.timestamp < DEFAULT_THROTTLE_TIME) {
+  if (cached && cached.frameId === currentFrameId) {
     return cached.rect;
-  }
-
-  if (!isElementVisible(el)) {
-    return null;
   }
 
   const rect = el.getBoundingClientRect();
@@ -61,7 +66,7 @@ export const getRect = (el: Element): DOMRect | null => {
     return null;
   }
 
-  rectCache.set(el, { rect, timestamp: now });
+  rectCache.set(el, { rect, frameId: currentFrameId });
 
   return rect;
 };
@@ -119,9 +124,32 @@ export const mergeOutlines = (outlines: Array<PendingOutline>) => {
 export const recalcOutlines = throttle(() => {
   const { scheduledOutlines, activeOutlines } = ReactScanInternals;
 
+  const domNodes = new Set<HTMLElement>();
+
+  // Collect domNodes from scheduledOutlines
   for (let i = scheduledOutlines.length - 1; i >= 0; i--) {
     const outline = scheduledOutlines[i];
-    const rect = getRect(outline.domNode);
+    domNodes.add(outline.domNode);
+  }
+
+  // Collect domNodes from activeOutlines
+  for (let i = activeOutlines.length - 1; i >= 0; i--) {
+    const activeOutline = activeOutlines[i];
+    if (!activeOutline) continue;
+    domNodes.add(activeOutline.outline.domNode);
+  }
+
+  // Batch compute rects for all unique domNodes
+  const rectMap = new Map<HTMLElement, DOMRect | null>();
+  domNodes.forEach((domNode) => {
+    const rect = getRect(domNode);
+    rectMap.set(domNode, rect);
+  });
+
+  // Update scheduledOutlines
+  for (let i = scheduledOutlines.length - 1; i >= 0; i--) {
+    const outline = scheduledOutlines[i];
+    const rect = rectMap.get(outline.domNode);
     if (!rect) {
       scheduledOutlines.splice(i, 1);
       continue;
@@ -129,16 +157,16 @@ export const recalcOutlines = throttle(() => {
     outline.rect = rect;
   }
 
+  // Update activeOutlines
   for (let i = activeOutlines.length - 1; i >= 0; i--) {
     const activeOutline = activeOutlines[i];
     if (!activeOutline) continue;
-    const { outline } = activeOutline;
-    const rect = getRect(outline.domNode);
+    const rect = rectMap.get(activeOutline.outline.domNode);
     if (!rect) {
       activeOutlines.splice(i, 1);
       continue;
     }
-    outline.rect = rect;
+    activeOutline.outline.rect = rect;
   }
 }, DEFAULT_THROTTLE_TIME);
 
@@ -359,8 +387,11 @@ export const fadeOutOutline = (
 
   ctx.restore();
 
-  for (let i = 0, len = pendingLabeledOutlines.length; i < len; i++) {
-    const { alpha, outline, color, reasons } = pendingLabeledOutlines[i];
+  // Merge overlapping labels to the "outermost" label
+  const mergedLabels = mergeOverlappingLabels(pendingLabeledOutlines, ctx);
+
+  for (let i = 0, len = mergedLabels.length; i < len; i++) {
+    const { alpha, outline, color, reasons } = mergedLabels[i];
     const labelText = getLabelText(outline.renders);
     const text =
       reasons.includes('unstable') &&
@@ -426,4 +457,129 @@ async function paintOutlines(
       animationFrameId = requestAnimationFrame(() => fadeOutOutline(ctx));
     }
   });
+}
+
+const mergeOverlappingLabels = (
+  labels: Array<OutlineLabel>,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+): Array<OutlineLabel> => {
+  const mergedLabels: Array<OutlineLabel> = [];
+  const labelRects = new Map<OutlineLabel, DOMRect>();
+
+  for (let i = 0, len = labels.length; i < len; i++) {
+    const label = labels[i];
+    const labelRect = getLabelRect(label, ctx);
+    labelRects.set(label, labelRect);
+  }
+
+  for (let i = 0, len = labels.length; i < len; i++) {
+    const label = labels[i];
+    const labelRect = labelRects.get(label)!;
+
+    let isMerged = false;
+
+    for (let j = 0, len2 = mergedLabels.length; j < len2; j++) {
+      const mergedLabel = mergedLabels[j];
+      const mergedLabelRect = getLabelRect(mergedLabel, ctx);
+
+      const overlapArea = getOverlapArea(labelRect, mergedLabelRect);
+
+      if (overlapArea > 0) {
+        const labelArea = labelRect.width * labelRect.height;
+        const mergedLabelArea = mergedLabelRect.width * mergedLabelRect.height;
+
+        const overlapPercentageLabel = overlapArea / labelArea;
+        const overlapPercentageMergedLabel = overlapArea / mergedLabelArea;
+
+        // Only merge if overlap is greater than 25%
+        if (
+          overlapPercentageLabel > 0.25 ||
+          overlapPercentageMergedLabel > 0.25
+        ) {
+          // Merge labels by combining their properties
+          const combinedOutline: PendingOutline = {
+            rect: getOutermostOutline(mergedLabel.outline, label.outline).rect,
+            domNode: getOutermostOutline(mergedLabel.outline, label.outline)
+              .domNode,
+            renders: [...mergedLabel.outline.renders, ...label.outline.renders],
+          };
+
+          // Update mergedLabel properties in place
+          mergedLabel.alpha = Math.max(mergedLabel.alpha, label.alpha);
+          mergedLabel.outline = combinedOutline;
+          mergedLabel.reasons = Array.from(
+            new Set(mergedLabel.reasons.concat(label.reasons)),
+          );
+
+          isMerged = true;
+          break;
+        }
+      }
+    }
+
+    if (!isMerged) {
+      // Add the label to mergedLabels
+      mergedLabels.push(label);
+    }
+  }
+
+  return mergedLabels;
+};
+
+// Helper function to get the bounding rectangle of a label
+const getLabelRect = (
+  label: OutlineLabel,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+): DOMRect => {
+  const { rect } = label.outline;
+  const text = getLabelText(label.outline.renders) ?? '';
+
+  const textMetrics = measureTextCached(text, ctx);
+  const textWidth = textMetrics.width;
+  const textHeight = 11;
+
+  const labelX = rect.x;
+  const labelY = rect.y - textHeight - 4;
+
+  return new DOMRect(labelX, labelY, textWidth + 4, textHeight + 4);
+};
+
+// Add a cache for text measurements
+const textMeasurementCache = new Map<string, TextMetrics>();
+
+const measureTextCached = (
+  text: string,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+): TextMetrics => {
+  if (textMeasurementCache.has(text)) {
+    return textMeasurementCache.get(text)!;
+  }
+  ctx.font = `11px ${MONO_FONT}`;
+  const metrics = ctx.measureText(text);
+  textMeasurementCache.set(text, metrics);
+  return metrics;
+};
+
+// Helper function to calculate overlap area
+function getOverlapArea(rect1: DOMRect, rect2: DOMRect): number {
+  const xOverlap = Math.max(
+    0,
+    Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left),
+  );
+  const yOverlap = Math.max(
+    0,
+    Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top),
+  );
+  return xOverlap * yOverlap;
+}
+
+// Helper function to determine the outermost outline based on area
+function getOutermostOutline(
+  outline1: PendingOutline,
+  outline2: PendingOutline,
+): PendingOutline {
+  const area1 = outline1.rect.width * outline1.rect.height;
+  const area2 = outline2.rect.width * outline2.rect.height;
+
+  return area1 >= area2 ? outline1 : outline2;
 }

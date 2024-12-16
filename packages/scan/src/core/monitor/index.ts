@@ -155,7 +155,7 @@ const aggregateComponentRenderToInteraction = (
 
     let totalTime = 0;
     for (const render of renders) {
-      totalTime += render.time;
+      totalTime += render.time ?? 0;
     }
 
     const displayName = getDisplayName(fiber.type);

@@ -109,7 +109,7 @@ export interface Render {
 
 const unstableTypes = ['function', 'object'];
 
-export const fastSerialize = (value: unknown, depth = 1) => {
+export const fastSerialize = (value: unknown, depth = 0) => {
   if (depth < 0) return '…';
   switch (typeof value) {
     case 'function':
@@ -121,7 +121,7 @@ export const fastSerialize = (value: unknown, depth = 1) => {
         return 'null';
       }
       if (Array.isArray(value)) {
-        return `[${value.map((item): string => fastSerialize(item, depth - 1)).join(', ')}]`;
+        return `[...]`;
       }
       if (isValidElement(value)) {
         // attempt to extract some name from the component
