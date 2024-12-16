@@ -2,6 +2,8 @@ import fsPromise from 'node:fs/promises';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'tsup';
+// @ts-expect-error no typedefs
+import { init, parse } from 'es-module-lexer';
 
 const DIST_PATH = './dist';
 
@@ -45,12 +47,9 @@ const banner = `/**
  */`;
 
 void (async () => {
-  if (process.env.NODE_ENV !== 'production') return;
-  // @ts-expect-error no typedefs
-  const { init, parse } = await import('es-module-lexer');
   await init;
 
-  const code = fs.readFileSync('./src/index.ts', 'utf8');
+  const code = fs.readFileSync('./src/core/index.ts', 'utf8');
   const [_, allExports] = parse(code);
   const names = [];
   for (const exportItem of allExports) {
@@ -70,12 +69,14 @@ void (async () => {
     script += `${createVar(name)}\n`;
   }
 
-  for (const ext of ['js', 'mjs', 'global.js']) {
-    fs.writeFileSync(`./dist/rsc-shim.${ext}`, script);
-  }
-  for (const ext of ['d.mts', 'd.ts']) {
-    fs.writeFileSync(`./dist/rsc-shim.${ext}`, `export {}`);
-  }
+  setTimeout(() => {
+    for (const ext of ['js', 'mjs', 'global.js']) {
+      fs.writeFileSync(`./dist/rsc-shim.${ext}`, script);
+    }
+    for (const ext of ['d.mts', 'd.ts']) {
+      fs.writeFileSync(`./dist/rsc-shim.${ext}`, `export {}`);
+    }
+  }, 500); // for some reason it clears the file if we don't wait
 })();
 
 export default defineConfig([
