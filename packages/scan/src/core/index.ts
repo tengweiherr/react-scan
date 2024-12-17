@@ -4,6 +4,7 @@ import { type Signal, signal } from '@preact/signals';
 import {
   getDisplayName,
   getRDTHook,
+  getNearestHostFiber,
   getTimings,
   getType,
   isCompositeFiber,
@@ -14,7 +15,6 @@ import {
 import {
   type ActiveOutline,
   flushOutlines,
-  getOutline,
   type PendingOutline,
 } from '@web-utils/outline';
 import { log, logIntro } from '@web-utils/log';
@@ -314,6 +314,15 @@ export const isValidFiber = (fiber: Fiber) => {
   return true;
 };
 
+let flushInterval: ReturnType<typeof setInterval>;
+const startFlushOutlineInterval = (ctx: CanvasRenderingContext2D) => {
+  clearInterval(flushInterval);
+  setInterval(() => {
+    requestAnimationFrame(() => {
+      flushOutlines(ctx);
+    });
+  }, 30);
+};
 export const start = () => {
   if (typeof window === 'undefined') return;
 
@@ -382,6 +391,7 @@ export const start = () => {
 
         ctx = initReactScanOverlay();
         if (!ctx) return;
+        startFlushOutlineInterval(ctx);
 
         createInspectElementStateMachine(shadow);
 
@@ -445,11 +455,16 @@ export const start = () => {
 
       for (let i = 0, len = renders.length; i < len; i++) {
         const render = renders[i];
-        const outline = getOutline(fiber, render);
-        if (!outline) continue;
-        ReactScanInternals.scheduledOutlines.push(outline);
+        const domFiber = getNearestHostFiber(fiber);
+        if (!domFiber || !domFiber.stateNode) continue;
 
-        // audio context can take up an insane amount of cpu, todo: figure out why
+        ReactScanInternals.scheduledOutlines.push({
+          domNode: domFiber.stateNode,
+          renders,
+        });
+
+        // - audio context can take up an insane amount of cpu, todo: figure out why
+        // - we may want to take this out of hot path
         if (ReactScanInternals.options.value.playSound && audioContext) {
           const renderTimeThreshold = 10;
           const amplitude = Math.min(
@@ -460,7 +475,6 @@ export const start = () => {
           playGeigerClickSound(audioContext, amplitude);
         }
       }
-      flushOutlines(ctx, new Map());
     },
     onCommitFinish() {
       ReactScanInternals.options.value.onCommitFinish?.();
