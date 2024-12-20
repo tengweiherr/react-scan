@@ -28,7 +28,10 @@ import {
 } from 'src/core/utils';
 import { readLocalStorage, saveLocalStorage } from '@web-utils/helpers';
 import { initReactScanOverlay } from './web/overlay';
-import { createInstrumentation, type Render } from './instrumentation';
+import {
+  createInstrumentation,
+  type Render,
+} from './instrumentation';
 import { createToolbar } from './web/toolbar';
 import type { InternalInteraction } from './monitor/types';
 import { type getSession } from './monitor/utils';
@@ -598,7 +601,9 @@ export const start = () => {
               fps: render.fps,
               phase: new Set([render.phase]),
               time: render.time,
-              unnecessary: render.unnecessary,
+              // todo: add back a when clear use case in the UI is needed for isRenderUnnecessary, or performance is optimized
+              // unnecessary: isRenderUnnecessary(fiber),
+              unnecessary: false,
               frame: 0,
 
               computedKey: null,

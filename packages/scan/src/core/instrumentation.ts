@@ -14,7 +14,7 @@ import {
   traverseProps,
 } from 'bippy';
 import { type Signal, signal } from '@preact/signals';
-import { ReactScanInternals } from './index';
+import { ReactScanInternals, Store } from './index';
 
 let fps = 0;
 let lastTime = performance.now();
@@ -364,8 +364,7 @@ export const createInstrumentation = (
           changes,
           time: selfTime,
           forget: hasMemoCache(fiber),
-          // only collect if the render was unnecessary 5% of the time since is isRenderUnnecessary is expensive
-          unnecessary: Math.random() < 0.05 ? isRenderUnnecessary(fiber) : null,
+          unnecessary: Store.monitor ? null : isRenderUnnecessary(fiber),
           didCommit: didFiberCommit(fiber),
           fps,
         };

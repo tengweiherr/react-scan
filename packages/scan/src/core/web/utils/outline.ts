@@ -201,14 +201,15 @@ export const fadeOutOutline = (
       reasons.push('commit');
     if (invariant_activeOutline.aggregatedRender.changes.unstable)
       reasons.push('unstable');
-    if (invariant_activeOutline.aggregatedRender.unnecessary) {
-      reasons.push('unnecessary');
-      if (reasons.length === 1) {
-        color.r = 128;
-        color.g = 128;
-        color.b = 128;
-      }
-    }
+    // todo: add better UI for unnecessary, adds too much overhead for a slight UI tweak
+    // if (invariant_activeOutline.aggregatedRender.unnecessary) {
+    //   reasons.push('unnecessary');
+    //   if (reasons.length === 1) {
+    //     color.r = 128;
+    //     color.g = 128;
+    //     color.b = 128;
+    //   }
+    // }
 
     const alphaScalar = 0.8;
     invariant_activeOutline.alpha =
@@ -391,6 +392,10 @@ const activateOutlines = async () => {
     const rect = rects.get(outline.domNode);
     if (!rect) {
       // intersection observer could not get a rect, so we have nothing to paint/activate
+      continue;
+    }
+
+    if (rect.top === rect.bottom || rect.left === rect.right) {
       continue;
     }
 
