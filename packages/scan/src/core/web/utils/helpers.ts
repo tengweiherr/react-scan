@@ -87,6 +87,8 @@ export const tryOrElse = <T, E>(cb: () => T, val: E) => {
   try {
     return cb();
   } catch (e) {
+    console.log('e', e);
+
     return val;
   }
 };

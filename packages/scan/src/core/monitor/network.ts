@@ -12,6 +12,7 @@ import type {
   InternalInteraction,
   Component,
 } from './types';
+import { tryOrElse } from '@web-utils/helpers';
 
 const INTERACTION_TIME_TILL_COMPLETED = 4000;
 
@@ -209,25 +210,30 @@ export const transport = async (
    * Perflink: https://dub.sh/json-replacer-fn
    */
   console.log('PAYLOAD', payload);
-  const json = JSON.stringify(payload, (key, value) => {
-    // Truncate floats to 5 decimal places (long floats cause error in ClickHouse)
-    if (
-      typeof value === 'number' &&
-      parseInt(value as any) !== value /* float check */
-    ) {
-      value = ~~(value * FLOAT_MAX_LEN) / FLOAT_MAX_LEN;
-    }
-    // Remove falsy (e.g. undefined, null, []), and keys starting with "_"
-    // to reduce the size of the payload
-    if (
-      // eslint-disable-next-line eqeqeq
-      (value != null && value !== false) ||
-      (Array.isArray(value) && value.length)
-    ) {
-      return value;
-    }
-  });
-  console.log('JSON PROCESSED', JSON.parse(json));
+  const json = tryOrElse(() => {
+    const json = JSON.stringify(payload, (key, value) => {
+      // Truncate floats to 5 decimal places (long floats cause error in ClickHouse)
+      if (
+        typeof value === 'number' &&
+        parseInt(value as any) !== value /* float check */
+      ) {
+        value = ~~(value * FLOAT_MAX_LEN) / FLOAT_MAX_LEN;
+      }
+      // Remove falsy (e.g. undefined, null, []), and keys starting with "_"
+      // to reduce the size of the payload
+      if (
+        // eslint-disable-next-line eqeqeq
+        (value != null && value !== false) ||
+        (Array.isArray(value) && value.length)
+      ) {
+        return value;
+      }
+    });
+    console.log('JSON PROCESSED', JSON.parse(json));
+    return json;
+  }, '{}');
+  console.log('wahoo');
+
   // gzip may not be worth it for small payloads,
   // only use it if the payload is large enough
   const shouldCompress = json.length > GZIP_MIN_LEN;
