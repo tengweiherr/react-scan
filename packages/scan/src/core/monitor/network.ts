@@ -144,6 +144,11 @@ export const flush = async (): Promise<void> => {
         totalTime: component.totalTime,
       });
     }
+
+    for (let j = 0; j < aggregatedComponents.length; j++) {
+      const component = aggregatedComponents[j];
+      console.log('COMPONENT RAW', component);
+    }
   }
 
   const payload: IngestRequest = {
@@ -203,6 +208,7 @@ export const transport = async (
    *
    * Perflink: https://dub.sh/json-replacer-fn
    */
+  console.log('PAYLOAD', payload);
   const json = JSON.stringify(payload, (key, value) => {
     // Truncate floats to 5 decimal places (long floats cause error in ClickHouse)
     if (
@@ -221,6 +227,7 @@ export const transport = async (
       return value;
     }
   });
+  console.log('JSON PROCESSED', JSON.parse(json));
   // gzip may not be worth it for small payloads,
   // only use it if the payload is large enough
   const shouldCompress = json.length > GZIP_MIN_LEN;
