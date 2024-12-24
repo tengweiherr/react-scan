@@ -66,13 +66,13 @@ export const recalcOutlines = throttle(async () => {
 // We interpolate the outline rects to avoid the appearance of jitter
 // reference: https://w3c.github.io/IntersectionObserver/
 export const batchGetBoundingRects = (
-  elements: Array<HTMLElement>,
-): Promise<Map<HTMLElement, DOMRect>> => {
+  elements: Array<Element>,
+): Promise<Map<Element, DOMRect>> => {
   return new Promise((resolve) => {
-    const results = new Map<HTMLElement, DOMRect>();
+    const results = new Map<Element, DOMRect>();
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        const element = entry.target as HTMLElement;
+        const element = entry.target as Element;
         const bounds = entry.boundingClientRect;
         results.set(element, bounds);
       }
@@ -507,6 +507,7 @@ const activateOutlines = async () => {
       existingOutline.aggregatedRender.computedKey = key;
 
       // handles canceling the animation of the associated render that was painted at a different location
+      // when the frame hits totalFrame, it auto gets removed, so we won't have a render in the wrong computed key location
       if (prevAggregatedRender?.computedKey) {
         const groupOnKey = activeOutlines.get(prevAggregatedRender.computedKey);
         groupOnKey?.groupedAggregatedRender?.forEach(
@@ -522,9 +523,6 @@ const activateOutlines = async () => {
       }
       activeOutlines.set(key, existingOutline);
     } else {
-      // we currently do not handle if the fiber moved positions, this is likely going to cause a problem somehwere
-      // (the same fiber likely will exist multiple times in the active outlines)
-      // this should be investigated asap
       if (!prevAggregatedRender) {
         existingOutline.alpha = outline.alpha;
         existingOutline.groupedAggregatedRender?.set(

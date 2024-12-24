@@ -12,7 +12,11 @@ import {
   traverseFiber,
   detectReactBuildType,
 } from 'bippy';
-import { flushOutlines, type Outline } from '@web-utils/outline';
+import {
+  batchGetBoundingRects,
+  flushOutlines,
+  type Outline,
+} from '@web-utils/outline';
 import { log, logIntro } from '@web-utils/log';
 import {
   createInspectElementStateMachine,
@@ -30,9 +34,17 @@ import { readLocalStorage, saveLocalStorage } from '@web-utils/helpers';
 import { initReactScanOverlay } from './web/overlay';
 import { createInstrumentation, type Render } from './instrumentation';
 import { createToolbar } from './web/toolbar';
-import type { InternalInteraction } from './monitor/types';
+import type {
+  InternalInteraction,
+  PerformanceInteraction,
+} from './monitor/types';
 import { type getSession } from './monitor/utils';
 import styles from './web/assets/css/styles.css';
+import {
+  getElementFromPerformanceEntry,
+  setupPerformanceListener,
+} from 'src/core/monitor/performance';
+import { getNearestFiberFromElement } from '@web-inspect-element/utils';
 
 let toolbarContainer: HTMLElement | null = null;
 let shadowRoot: ShadowRoot | null = null;
@@ -192,6 +204,37 @@ interface StoreType {
 
 export type OutlineKey = `${string}-${string}`;
 
+interface Particle {
+  x: number;
+  y: number;
+  alpha: number;
+  velocity: { x: number; y: number };
+  size?: number;
+  life?: number;
+}
+
+interface FireParticle extends Particle {
+  hue: number;
+  life: number;
+  maxLife: number;
+}
+
+interface InteractionOutline {
+  rect: DOMRect;
+  frame: number;
+  alpha: number;
+  color: { r: number; g: number; b: number };
+  particles?: Particle[];
+  fireParticles?: FireParticle[];
+}
+
+interface DOMInteraction {
+  kind: 'pointer' | 'keyboard';
+  time: number;
+  outline: InteractionOutline;
+  element: Element;
+}
+
 export interface Internals {
   instrumentation: ReturnType<typeof createInstrumentation> | null;
   componentAllowList: WeakMap<React.ComponentType<any>, Options> | null;
@@ -199,6 +242,8 @@ export interface Internals {
   scheduledOutlines: Map<Fiber, Outline>; // we clear t,his nearly immediately, so no concern of mem leak on the fiber
   // outlines at the same coordinates always get merged together, so we pre-compute the merge ahead of time when aggregating in activeOutlines
   activeOutlines: Map<OutlineKey, Outline>; // we re-use the outline object on the scheduled outline
+  // active interaction outlines should work with or without react on the site, and should only be progressively enhanced
+  activeInteractionOutlines: Map<Element, DOMInteraction>;
   onRender: ((fiber: Fiber, renders: Array<Render>) => void) | null;
   Store: StoreType;
 }
@@ -238,6 +283,7 @@ export const ReactScanInternals: Internals = {
   onRender: null,
   scheduledOutlines: new Map(),
   activeOutlines: new Map(),
+  activeInteractionOutlines: new Map(),
   Store,
 };
 
@@ -447,6 +493,285 @@ const startFlushOutlineInterval = (ctx: CanvasRenderingContext2D) => {
   }, 30);
 };
 
+const drawInteractionOutline = (
+  domInteraction: DOMInteraction,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+) => {
+  fadeOutInteractionOutline(domInteraction, ctx);
+};
+
+const TOTAL_INTERACTION_OUTLINE_FRAMES = 158;
+
+const drawFireEffect = (
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  frame: number,
+  alpha: number,
+) => {
+  const flameHeight = 10;
+  const segments = 12;
+  const cornerOffset = 3;
+  const segmentWidth = (width - cornerOffset * 2) / segments;
+
+  ctx.globalCompositeOperation = 'screen';
+
+  ctx.beginPath();
+  ctx.moveTo(x + cornerOffset, y);
+
+  for (let i = 0; i <= segments; i++) {
+    const xPos = x + cornerOffset + i * segmentWidth;
+    const time = frame * 0.15 + i * 0.8;
+
+    const noise1 = Math.sin(time * 1.5) * 5;
+    const noise2 = Math.cos(time * 0.8 + i) * 4;
+    const noise3 = Math.sin((time + i) * 0.3) * 8;
+
+    const jitter = (Math.random() - 0.5) * 3;
+
+    const flameY = y - Math.abs(noise1 + noise2 + noise3 + jitter);
+
+    if (i === 0) {
+      ctx.moveTo(xPos, y);
+    } else {
+      const cpX = xPos - segmentWidth / 2 + (Math.random() - 0.5) * 5;
+      const cpY = flameY + (Math.random() - 0.5) * 8;
+      ctx.quadraticCurveTo(cpX, cpY, xPos, flameY);
+    }
+  }
+
+  ctx.lineTo(x + width - cornerOffset, y);
+
+  const gradient = ctx.createLinearGradient(x, y - flameHeight, x, y);
+  gradient.addColorStop(0, `hsla(15, 100%, 50%, 0)`);
+  gradient.addColorStop(0.3, `hsla(20, 100%, 50%, ${alpha * 0.7})`);
+  gradient.addColorStop(0.6, `hsla(35, 100%, 70%, ${alpha})`);
+  gradient.addColorStop(0.8, `hsla(45, 100%, 60%, ${alpha})`);
+  gradient.addColorStop(1, `hsla(15, 100%, 50%, ${alpha})`);
+
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'source-over';
+};
+
+const fadeOutInteractionOutline = (
+  domInteraction: DOMInteraction,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+) => {
+  const dpi = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, ctx.canvas.width / dpi, ctx.canvas.height / dpi);
+
+  const labelText = `${Math.round(domInteraction.time)}ms`;
+  ctx.font = 'bold 16px system-ui';
+  const textMetrics = ctx.measureText(labelText);
+  const textWidth = textMetrics.width;
+  const textHeight = 16;
+  const padding = 6;
+  const labelBoxHeight = textHeight + padding * 2;
+
+  domInteraction.outline.frame -= 1;
+  domInteraction.outline.alpha =
+    domInteraction.outline.frame / TOTAL_INTERACTION_OUTLINE_FRAMES;
+
+  const { alpha, color, rect } = domInteraction.outline;
+  const rgb = `${color.r},${color.g},${color.b}`;
+  const isWarning = domInteraction.time >= 100;
+  const isCritical = domInteraction.time >= 200;
+
+  const labelRect = {
+    x: rect.x,
+    y: rect.y,
+    width: textWidth + padding * 2,
+    height: labelBoxHeight,
+  };
+
+  const labelTop = labelRect.y - labelBoxHeight - 4;
+
+  if (isCritical && !domInteraction.outline.fireParticles) {
+    domInteraction.outline.fireParticles = Array.from(
+      { length: Math.ceil(labelRect.width / 15) },
+      (_, i) => ({
+        x: labelRect.x - padding + i * 15 + Math.random() * 10,
+        y: labelTop,
+        alpha: 1,
+        velocity: {
+          x: (Math.random() - 0.5) * 0.8,
+          y: -Math.random() * 1.2 - 0.8,
+        },
+        hue: Math.random() * 30 + 15,
+        life: Math.random() * 20 + 15,
+        maxLife: 35,
+      }),
+    );
+  }
+
+  const glowStrength = isCritical ? 15 : isWarning ? 12 : 8;
+  ctx.shadowColor = isCritical
+    ? `rgba(255,100,0,${alpha * 0.6})`
+    : `rgba(${rgb},${alpha * 0.6})`;
+  ctx.shadowBlur = glowStrength;
+  ctx.strokeStyle = `rgba(${rgb},${alpha})`;
+  ctx.lineWidth = isCritical ? 3 : 2;
+  ctx.fillStyle = `rgba(${rgb},${alpha * 0.1})`;
+
+  const radius = 4;
+  ctx.beginPath();
+  ctx.roundRect(rect.x, rect.y, rect.width, rect.height, radius);
+  ctx.stroke();
+  ctx.fill();
+
+  if (isCritical && domInteraction.outline.fireParticles) {
+    ctx.globalCompositeOperation = 'screen';
+
+    domInteraction.outline.fireParticles.forEach((particle, i) => {
+      particle.life -= 0.7;
+      if (particle.life <= 0) {
+        const particleIndex = i % Math.ceil(labelRect.width / 15);
+        particle.x =
+          labelRect.x - padding + particleIndex * 15 + Math.random() * 10;
+        particle.y = labelTop;
+        particle.life = particle.maxLife;
+        particle.alpha = 1;
+        particle.velocity.x = (Math.random() - 0.5) * 0.8;
+        particle.velocity.y = -Math.random() * 1.2 - 0.8;
+      }
+
+      particle.x += particle.velocity.x;
+      particle.y += particle.velocity.y;
+      particle.velocity.y *= 0.97;
+
+      const distanceFromSource = labelRect.y - particle.y;
+      particle.x +=
+        Math.sin(particle.y * 0.1 + domInteraction.outline.frame * 0.05) *
+        (0.3 * (distanceFromSource / 50));
+
+      const lifeRatio = particle.life / particle.maxLife;
+      const particleAlpha = lifeRatio * alpha;
+
+      const size = 1.8 * (1 + distanceFromSource / 50);
+      const gradient = ctx.createRadialGradient(
+        particle.x,
+        particle.y,
+        0,
+        particle.x,
+        particle.y,
+        size * lifeRatio,
+      );
+
+      const baseHue = particle.hue - distanceFromSource / 4;
+      gradient.addColorStop(0, `hsla(${baseHue}, 100%, 50%, ${particleAlpha})`);
+      gradient.addColorStop(
+        0.5,
+        `hsla(${baseHue + 15}, 100%, 50%, ${particleAlpha * 0.5})`,
+      );
+      gradient.addColorStop(1, 'hsla(0, 0%, 0%, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, size * lifeRatio, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  ctx.shadowColor = `rgba(0,0,0,${alpha * 0.3})`;
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = `rgba(${rgb},${alpha})`;
+  ctx.beginPath();
+  ctx.roundRect(
+    labelRect.x - padding,
+    labelTop,
+    textWidth + padding * 2,
+    labelBoxHeight,
+    4,
+  );
+  ctx.fill();
+
+  if (isCritical) {
+    drawFireEffect(
+      ctx,
+      labelRect.x - padding,
+      labelTop,
+      textWidth + padding * 2,
+      domInteraction.outline.frame * 1.2,
+      alpha,
+    );
+  }
+
+  ctx.shadowColor = `rgba(0,0,0,${alpha * 0.5})`;
+  ctx.shadowBlur = 2;
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(
+    labelText,
+    labelRect.x - padding + (textWidth + padding * 2) / 2,
+    labelTop + labelBoxHeight / 2,
+  );
+
+  if (isCritical && domInteraction.outline.fireParticles) {
+    domInteraction.outline.fireParticles.forEach((particle, i) => {
+      particle.life -= 0.7;
+      if (particle.life <= 0) {
+        const particleIndex = i % Math.ceil(labelRect.width / 15);
+        particle.x =
+          labelRect.x - padding + particleIndex * 15 + Math.random() * 10;
+        particle.y = labelTop;
+        particle.life = particle.maxLife;
+        particle.alpha = 1;
+        particle.velocity.x = (Math.random() - 0.5) * 0.8;
+        particle.velocity.y = -Math.random() * 1.2 - 0.8;
+      }
+
+      particle.x += particle.velocity.x;
+      particle.y += particle.velocity.y;
+      particle.velocity.y *= 0.97;
+
+      const distanceFromSource = labelRect.y - particle.y;
+      particle.x +=
+        Math.sin(particle.y * 0.1 + domInteraction.outline.frame * 0.05) *
+        (0.3 * (distanceFromSource / 50));
+
+      const lifeRatio = particle.life / particle.maxLife;
+      const particleAlpha = lifeRatio * alpha;
+
+      const size = 1.8 * (1 + distanceFromSource / 50);
+      const gradient = ctx.createRadialGradient(
+        particle.x,
+        particle.y,
+        0,
+        particle.x,
+        particle.y,
+        size * lifeRatio,
+      );
+
+      const baseHue = particle.hue - distanceFromSource / 4;
+      gradient.addColorStop(0, `hsla(${baseHue}, 100%, 50%, ${particleAlpha})`);
+      gradient.addColorStop(
+        0.5,
+        `hsla(${baseHue + 15}, 100%, 50%, ${particleAlpha * 0.5})`,
+      );
+      gradient.addColorStop(1, 'hsla(0, 0%, 0%, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, size * lifeRatio, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // todo: flip condition to converse
+  if (domInteraction.outline.frame <= 0) {
+    ReactScanInternals.activeInteractionOutlines.delete(domInteraction.element);
+    return;
+  }
+
+  requestAnimationFrame(() => fadeOutInteractionOutline(domInteraction, ctx));
+};
+
 const updateScheduledOutlines = (fiber: Fiber, renders: Array<Render>) => {
   for (let i = 0, len = renders.length; i < len; i++) {
     const render = renders[i];
@@ -485,7 +810,7 @@ const updateScheduledOutlines = (fiber: Fiber, renders: Array<Render>) => {
     }
   }
 };
-// we only need to run this check once and will read the value in hot path
+// we only need to run this check once and will read the value in hot path, so best to cache indefinitely
 let isProduction: boolean | null = null;
 let rdtHook: ReturnType<typeof getRDTHook>;
 export const getIsProduction = () => {
@@ -500,6 +825,19 @@ export const getIsProduction = () => {
     }
   }
   return isProduction;
+};
+
+let unSubPerformanceListener: null | (() => void);
+
+export const getColorFromPerformanceEntry = (entry: PerformanceInteraction) => {
+  const duration = Math.min(entry.duration, 400);
+  const ratio = (duration - 150) / 250; // Normalize between 150ms and 400ms
+
+  // Start with orange (255, 165, 0) and transition to dark red (139, 0, 0)
+  const red = Math.round(255 - ratio * (255 - 139)); // 255 -> 139
+  const green = Math.round(165 * (1 - ratio)); // 165 -> 0
+
+  return { r: red, g: green, b: 0 };
 };
 
 export const start = () => {
@@ -582,6 +920,44 @@ export const start = () => {
       startFlushOutlineInterval(ctx);
 
       createInspectElementStateMachine(shadowRoot);
+      unSubPerformanceListener?.();
+      unSubPerformanceListener = setupPerformanceListener(async (entry) => {
+        if (entry.duration < 200) return;
+
+        const element = getElementFromPerformanceEntry(entry);
+        if (!element) return;
+
+        let rect = await batchGetBoundingRects([element]).then((map) =>
+          map.get(element),
+        );
+        if (!rect) return;
+
+        const existingActiveInteraction =
+          ReactScanInternals.activeInteractionOutlines.get(element);
+
+        if (existingActiveInteraction) {
+          existingActiveInteraction.outline.frame =
+            TOTAL_INTERACTION_OUTLINE_FRAMES;
+        }
+
+        const domInteraction = {
+          kind: entry.type,
+          outline: {
+            alpha: 1,
+            color: getColorFromPerformanceEntry(entry),
+            frame: TOTAL_INTERACTION_OUTLINE_FRAMES,
+            rect,
+          },
+          time: entry.duration,
+          element,
+        };
+
+        ReactScanInternals.activeInteractionOutlines.set(
+          element,
+          domInteraction,
+        );
+        drawInteractionOutline(domInteraction, ctx!);
+      });
 
       globalThis.__REACT_SCAN__ = {
         ReactScanInternals,
@@ -635,10 +1011,6 @@ export const start = () => {
         ) {
           reportRender(fiber, renders);
         }
-      }
-
-      if (ReactScanInternals.options.value.log) {
-        renders;
       }
 
       ReactScanInternals.options.value.onRender?.(fiber, renders);

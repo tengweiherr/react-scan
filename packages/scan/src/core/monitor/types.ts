@@ -67,6 +67,7 @@ export interface InternalInteraction {
   uniqueInteractionId: string; // uniqueInteractionId is unique to the session and provided by performance observer.
   componentPath: Array<string>;
   performanceEntry: PerformanceInteraction;
+  // entries:Array<PerformanceInteraction>
   components: Map<string, InternalComponentCollection>;
 }
 interface InternalComponentCollection {

@@ -1,7 +1,10 @@
 import { getDisplayName } from 'bippy';
 import { type Fiber } from 'react-reconciler';
 import { Store } from '../..';
-import { getCompositeComponentFromElement } from '../web/inspect-element/utils';
+import {
+  getCompositeComponentFromElement,
+  getParentCompositeFiber,
+} from '../web/inspect-element/utils';
 import type {
   PerformanceInteraction,
   PerformanceInteractionEntry,
@@ -113,7 +116,7 @@ export const getInteractionPath = (
   return fullPath;
 };
 
-let currentMouseOver: Element;
+export let performanceCurrentMouseOver: Element;
 
 const getCleanComponentName = (
   component: any /** fiber.type is any */,
@@ -127,16 +130,18 @@ const getCleanComponentName = (
   );
 };
 
-// For future use, normalization of paths happens on server side now using path property of interaction
-const _normalizePath = (path: Array<string>): string => {
-  const cleaned = path.filter(Boolean);
-  const deduped = cleaned.filter((name, i) => name !== cleaned[i - 1]);
-  return deduped.join('.');
-};
+// // For future use, normalization of paths happens on server side now using path property of interaction
+// const _normalizePath = (path: Array<string>): string => {
+//   const cleaned = path.filter(Boolean);
+//   const deduped = cleaned.filter((name, i) => name !== cleaned[i - 1]);
+//   return deduped.join('.');
+// };
 
+// Interaction observer sometimes does not provide a target element on pointer events
+// todo: formalize exactly when/why the browser does this
 const handleMouseover = (event: Event) => {
   if (!(event.target instanceof Element)) return;
-  currentMouseOver = event.target;
+  performanceCurrentMouseOver = event.target;
 };
 
 const getFirstNamedAncestorCompositeFiber = (element: Element) => {
@@ -176,6 +181,33 @@ const trackVisibilityChange = () => {
   };
 };
 
+// export const getFiberFromInteractionTarget = (entry: PerformanceInteraction) => {
+//   const target =
+//       entry.target ?? (entry.type === 'pointer' ? currentMouseOver : null);
+//     if (!target) {
+//       // most likely an invariant that we should log if its violated
+//       return;
+//     }
+//     const parentCompositeFiber = getParentCompositeFiber(target);
+//     if (!parentCompositeFiber) {
+//       return;
+//     }
+
+// return
+// }
+
+export const getElementFromPerformanceEntry = (
+  entry: PerformanceInteraction,
+) => {
+  const target =
+    entry.target ??
+    (entry.type === 'pointer' ? performanceCurrentMouseOver : null);
+  if (!target) {
+    // most likely an invariant that we should log if its violated
+    return;
+  }
+  return target;
+};
 // todo: update monitoring api to expose filters for component names
 export function initPerformanceMonitoring(options?: Partial<PathFilters>) {
   const filters = { ...DEFAULT_FILTERS, ...options };
@@ -184,10 +216,8 @@ export function initPerformanceMonitoring(options?: Partial<PathFilters>) {
 
   document.addEventListener('mouseover', handleMouseover);
   const disconnectPerformanceListener = setupPerformanceListener((entry) => {
-    const target =
-      entry.target ?? (entry.type === 'pointer' ? currentMouseOver : null);
+    const target = getElementFromPerformanceEntry(entry);
     if (!target) {
-      // most likely an invariant that we should log if its violated
       return;
     }
     const parentCompositeFiber = getFirstNamedAncestorCompositeFiber(target);
@@ -225,7 +255,7 @@ export function initPerformanceMonitoring(options?: Partial<PathFilters>) {
 const getInteractionType = (
   eventName: string,
 ): 'pointer' | 'keyboard' | null => {
-  if (['pointerdown', 'pointerup', 'click'].includes(eventName)) {
+  if (['pointerup', 'click'].includes(eventName)) {
     return 'pointer';
   }
   if (['keydown', 'keyup'].includes(eventName)) {
@@ -234,14 +264,17 @@ const getInteractionType = (
   return null;
 };
 
-const setupPerformanceListener = (
+export const setupPerformanceListener = (
   onEntry: (interaction: PerformanceInteraction) => void,
 ) => {
   trackVisibilityChange();
   const longestInteractionMap = new Map<string, PerformanceInteraction>();
   const interactionTargetMap = new Map<string, Element>();
 
+  // adapted from GoogleChrome/web-vitals https://github.com/GoogleChrome/web-vitals/blob/main/src/lib/interactions.ts
   const processInteractionEntry = (entry: PerformanceInteractionEntry) => {
+    console.log();
+
     if (!(entry.interactionId || entry.entryType === 'first-input')) return;
 
     if (
