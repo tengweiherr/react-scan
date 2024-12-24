@@ -148,7 +148,7 @@ export const flush = async (): Promise<void> => {
     for (let j = 0; j < aggregatedComponents.length; j++) {
       const component = aggregatedComponents[j];
       const total = component.totalTime ?? 0;
-      if (total > 1000) {
+      if (total > 100000) {
         console.log('????huh', total, component, component.totalTime);
       }
     }
