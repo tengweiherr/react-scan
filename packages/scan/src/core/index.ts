@@ -451,7 +451,7 @@ const updateScheduledOutlines = (fiber: Fiber, renders: Array<Render>) => {
   for (let i = 0, len = renders.length; i < len; i++) {
     const render = renders[i];
     const domFiber = getNearestHostFiber(fiber);
-    if (!domFiber || !domFiber.stateNode) continue;
+    if (!domFiber || !domFiber.stateNode || !(domFiber.stateNode instanceof Element)) continue;
 
     if (ReactScanInternals.scheduledOutlines.has(fiber)) {
       const existingOutline = ReactScanInternals.scheduledOutlines.get(fiber)!;

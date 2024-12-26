@@ -42,7 +42,7 @@ if (typeof window !== 'undefined') {
 
 export const recalcOutlines = throttle(async () => {
   const { activeOutlines } = ReactScanInternals;
-  const domNodes: Array<HTMLElement> = [];
+  const domNodes: Array<Element> = [];
   for (const activeOutline of activeOutlines.values()) {
     domNodes.push(activeOutline.domNode);
   }
@@ -64,13 +64,13 @@ export const recalcOutlines = throttle(async () => {
 // We interpolate the outline rects to avoid the appearance of jitter
 // reference: https://w3c.github.io/IntersectionObserver/
 export const batchGetBoundingRects = (
-  elements: Array<HTMLElement>,
-): Promise<Map<HTMLElement, DOMRect>> => {
+  elements: Array<Element>,
+): Promise<Map<Element, DOMRect>> => {
   return new Promise((resolve) => {
-    const results = new Map<HTMLElement, DOMRect>();
+    const results = new Map<Element, DOMRect>();
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        const element = entry.target as HTMLElement;
+        const element = entry.target as Element;
         const bounds = entry.boundingClientRect;
         results.set(element, bounds);
       }
@@ -316,7 +316,7 @@ export const fadeOutOutline = () => {
 type ComponentName = string;
 
 export interface Outline {
-  domNode: HTMLElement;
+  domNode: Element;
   /** Aggregated render info */ // TODO: Flatten AggregatedRender into Outline to avoid re-creating objects
   // this render is useless when in active outlines (confirm this rob)
   aggregatedRender: AggregatedRender; // maybe we should set this to null when its useless
@@ -387,7 +387,7 @@ export const getIsOffscreen = (rect: DOMRect) => {
   );
 };
 const activateOutlines = async () => {
-  const domNodes: Array<HTMLElement> = [];
+  const domNodes: Array<Element> = [];
   const scheduledOutlines = ReactScanInternals.scheduledOutlines;
   const activeOutlines = ReactScanInternals.activeOutlines;
   const activeFibers = new Map<Fiber, AggregatedRender>();
