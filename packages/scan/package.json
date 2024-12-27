@@ -196,6 +196,7 @@
     "build": "npm run build:css && NODE_ENV=production tsup",
     "postbuild": "pnpm copy-astro && node ../../scripts/version-warning.mjs",
     "build:copy": "NODE_ENV=production tsup && cat dist/auto.global.js | pbcopy",
+    "build:copy-monitor": "NODE_ENV=production tsup && cat dist/auto-monitor.global.js | pbcopy",
     "copy-astro": "cp -R src/core/monitor/params/astro dist/core/monitor/params",
     "dev:css": "npx tailwindcss -i ./src/core/web/assets/css/styles.tailwind.css -o ./src/core/web/assets/css/styles.css --watch",
     "dev:tsup": "NODE_ENV=development tsup --watch",

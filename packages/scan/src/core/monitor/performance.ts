@@ -293,6 +293,8 @@ const setupPerformanceListener = (
       };
       longestInteractionMap.set(interaction.id, interaction);
 
+      console.log('interaction', interaction);
+
       onEntry(interaction);
     }
   };

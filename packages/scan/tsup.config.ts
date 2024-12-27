@@ -85,7 +85,7 @@ void (async () => {
 
 export default defineConfig([
   {
-    entry: ['./src/auto.ts', './src/install-hook.ts'],
+    entry: ['./src/auto.ts', './src/install-hook.ts', './src/auto-monitor.ts'],
     outDir: DIST_PATH,
     banner: {
       js: banner,
