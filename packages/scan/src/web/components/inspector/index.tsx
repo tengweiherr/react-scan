@@ -28,7 +28,7 @@ import {
   getStateNames,
   resetStateTracking,
 } from './overlay/utils';
-import { getCompositeComponentFromElement, getOverrideMethods } from './utils';
+import { getCompositeFiberFromElement, getOverrideMethods } from './utils';
 
 interface InspectorState {
   fiber: Fiber | null;
@@ -1207,9 +1207,13 @@ export const Inspector = constant(() => {
     };
 
     const unSubState = Store.inspectState.subscribe((state) => {
-      if (state.kind !== 'focused' || !state.focusedDomElement) return;
+      if (state.kind !== 'focused' || !state.focusedDomElement) {
+        clearTimeout(debounceTimer);
+        cancelAnimationFrame(rafId);
+        return;
+      };
 
-      const { parentCompositeFiber } = getCompositeComponentFromElement(
+      const { parentCompositeFiber } = getCompositeFiberFromElement(
         state.focusedDomElement,
       );
       if (!parentCompositeFiber) return;
@@ -1221,11 +1225,15 @@ export const Inspector = constant(() => {
       if (isProcessing) return;
 
       const inspectState = Store.inspectState.value;
-      if (inspectState.kind !== 'focused') return;
+      if (inspectState.kind !== 'focused') {
+        clearTimeout(debounceTimer);
+        cancelAnimationFrame(rafId);
+        return;
+      }
 
       const element = inspectState.focusedDomElement;
       const { parentCompositeFiber } =
-        getCompositeComponentFromElement(element);
+        getCompositeFiberFromElement(element);
 
       if (parentCompositeFiber && lastInspectedFiber) {
         processFiberUpdate(parentCompositeFiber);

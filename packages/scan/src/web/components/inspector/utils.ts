@@ -184,6 +184,31 @@ export const getCompositeComponentFromElement = (element: Element) => {
   };
 };
 
+export const getCompositeFiberFromElement = (element: Element) => {
+  const associatedFiber = getNearestFiberFromElement(element);
+
+  if (!associatedFiber) return {};
+  const currentAssociatedFiber = isCurrentTree(associatedFiber)
+    ? associatedFiber
+    : (associatedFiber.alternate ?? associatedFiber);
+  const stateNode = getFirstStateNode(currentAssociatedFiber);
+  if (!stateNode) return {};
+
+  const anotherRes = getParentCompositeFiber(currentAssociatedFiber);
+  if (!anotherRes) {
+    return {};
+  }
+  let [parentCompositeFiber] = anotherRes;
+  parentCompositeFiber =
+    (isCurrentTree(parentCompositeFiber)
+      ? parentCompositeFiber
+      : parentCompositeFiber.alternate) ?? parentCompositeFiber;
+
+  return {
+    parentCompositeFiber,
+  };
+};
+
 interface PropChange {
   name: string;
   value: unknown;

@@ -200,7 +200,14 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   return changes;
 };
 
-const getStateValue = (memoizedState: MemoizedState): unknown => {
+interface ExtendedMemoizedState extends MemoizedState {
+  queue?: {
+    lastRenderedState: unknown;
+  } | null;
+  element?: unknown;
+}
+
+const getStateValue = (memoizedState: ExtendedMemoizedState): unknown => {
   if (!memoizedState) return undefined;
 
   const queue = memoizedState.queue;
