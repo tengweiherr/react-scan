@@ -1,10 +1,9 @@
-import { type JSX } from 'preact';
+import type { JSX } from 'preact';
 import { useCallback, useEffect, useRef } from 'preact/hooks';
 import { Store } from '~core/index';
 import { ScanOverlay } from '~web/components/inspector/overlay';
 import {
   cn,
-  debounce,
   saveLocalStorage,
   toggleMultipleClasses,
 } from '~web/utils/helpers';
@@ -23,7 +22,7 @@ import {
   getBestCorner,
 } from './helpers';
 import { ResizeHandle } from './resize-handle';
-import Toolbar from './toolbar';
+import { Toolbar } from './toolbar';
 
 export const Widget = () => {
   const refShouldExpand = useRef<boolean>(false);
@@ -42,7 +41,8 @@ export const Widget = () => {
     const isInspectFocused = inspectState.kind === 'focused';
 
     const { corner } = signalWidget.value;
-    let newWidth, newHeight;
+    let newWidth: number;
+    let newHeight: number;
 
     if (isInspectFocused) {
       const lastDims = signalWidget.value.lastDimensions;
@@ -68,9 +68,9 @@ export const Widget = () => {
 
     const newPosition = calculatePosition(corner, newWidth, newHeight);
 
-    if (newWidth < MIN_SIZE.width || newHeight < MIN_SIZE.height * 5) {
-      shouldSave = false;
-    }
+    const isTooSmall =
+      newWidth < MIN_SIZE.width || newHeight < MIN_SIZE.height * 5;
+    const shouldPersist = shouldSave && !isTooSmall;
 
     const container = refContainer.current;
     const containerStyle = container.style;
@@ -114,7 +114,7 @@ export const Widget = () => {
           : signalWidget.value.lastDimensions,
     };
 
-    if (shouldSave) {
+    if (shouldPersist) {
       saveLocalStorage(LOCALSTORAGE_KEY, {
         corner: signalWidget.value.corner,
         dimensions: signalWidget.value.dimensions,
@@ -250,6 +250,7 @@ export const Widget = () => {
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
     if (!refContainer.current || !refFooter.current) return;
 
@@ -306,12 +307,11 @@ export const Widget = () => {
       },
     );
 
-    const handleWindowResize = debounce(() => {
+    const handleWindowResize = () => {
       updateWidgetPosition(true);
-    }, 100);
+    };
 
     window.addEventListener('resize', handleWindowResize, { passive: true });
-    updateWidgetPosition(false);
 
     return () => {
       window.removeEventListener('resize', handleWindowResize);

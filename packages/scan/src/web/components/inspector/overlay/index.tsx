@@ -1,11 +1,10 @@
-import { getDisplayName } from 'bippy';
+import { type Fiber, getDisplayName } from 'bippy';
 import { useEffect, useRef } from 'preact/hooks';
-import type { Fiber } from 'react-reconciler';
 import { ReactScanInternals, Store } from '~core/index';
 import {
+  type States,
   findComponentDOMNode,
   getCompositeComponentFromElement,
-  type States,
 } from '~web/components/inspector/utils';
 import { cn, throttle } from '~web/utils/helpers';
 import { lerp } from '~web/utils/lerp';
@@ -288,7 +287,9 @@ export const ScanOverlay = () => {
   };
 
   const unsubscribeAll = () => {
-    refCleanupMap.current.forEach((cleanup) => cleanup?.());
+    for (const cleanup of refCleanupMap.current.values()) {
+      cleanup?.();
+    }
   };
 
   const cleanupCanvas = (canvas: HTMLCanvasElement) => {
@@ -364,11 +365,11 @@ export const ScanOverlay = () => {
     startFadeOut();
   };
 
-  const handleMouseMove = throttle((e: MouseEvent) => {
+  const handleMouseMove = throttle((e?: MouseEvent) => {
     const state = Store.inspectState.peek();
     if (state.kind !== 'inspecting' || !refEventCatcher.current) return;
 
-    const element = document.elementFromPoint(e.clientX, e.clientY);
+    const element = document.elementFromPoint(e?.clientX ?? 0, e?.clientY ?? 0);
     clearTimeout(refTimeout.current);
 
     if (element && element !== refCanvas.current) {
@@ -590,6 +591,7 @@ export const ScanOverlay = () => {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
     const canvas = refCanvas.current;
     if (!canvas) return;

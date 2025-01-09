@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import { getDisplayName } from 'bippy';
+import { type Fiber, getDisplayName } from 'bippy';
 import { Component } from 'preact';
 import {
   useCallback,
@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from 'preact/hooks';
-import type { Fiber } from 'react-reconciler';
 import { Store } from '~core/index';
 import { isEqual } from '~core/utils';
 import { CopyToClipboard } from '~web/components/copy-to-clipboard';
@@ -197,22 +196,21 @@ const isEditableValue = (value: unknown, parentPath?: string): boolean => {
     }
   }
 
-  switch (typeof value) {
-    case 'string':
-    case 'number':
-    case 'boolean':
-    case 'bigint':
+  switch (value.constructor) {
+    case Date:
+    case RegExp:
+    case Error:
       return true;
-    case 'object':
-      if (
-        value instanceof Date ||
-        value instanceof RegExp ||
-        value instanceof Error
-      ) {
-        return true;
-      }
     default:
-      return false;
+      switch (typeof value) {
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'bigint':
+          return true;
+        default:
+          return false;
+      }
   }
 };
 
@@ -555,7 +553,7 @@ const EditableValue = ({ value, onSave, onCancel }: EditableValueProps) => {
         initialValue = formatInitialValue(value);
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
+      // biome-ignore lint/suspicious/noConsole: Intended debug output
       console.warn(sanitizeErrorMessage(String(error)));
       initialValue = String(value);
     }
@@ -867,7 +865,7 @@ const PropertyElement = ({
 
             const currentState = getCurrentState(fiber);
             if (!currentState || !(baseStateKey in currentState)) {
-              // eslint-disable-next-line no-console
+              // biome-ignore lint/suspicious/noConsole: Intended debug output
               console.warn(sanitizeErrorMessage('Invalid state key'));
               return;
             }

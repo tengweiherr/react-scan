@@ -91,16 +91,16 @@ svg {
   @apply z-[2147483678];
   @apply animate-fade-in animation-duration-300 animation-delay-300;
   @apply shadow-[0_4px_12px_rgba(0,0,0,0.2)];
+}
 
-  button {
-    &:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
+.button {
+	&:hover {
+		background: rgba(255, 255, 255, 0.1);
+	}
 
-    &:active {
-      background: rgba(255, 255, 255, 0.15);
-    }
-  }
+	&:active {
+		background: rgba(255, 255, 255, 0.15);
+	}
 }
 
 .resize-line-wrapper {

@@ -45,7 +45,7 @@ function setupOutlineWorker(): (action: OutlineWorkerAction) => Promise<void> {
     'Menlo,Consolas,Monaco,Liberation Mono,Lucida Console,monospace';
   let ctx: OffscreenCanvasRenderingContext2D | undefined;
 
-  const enum Reason {
+  enum Reason {
     Commit = 0b001,
     Unstable = 0b010,
     Unnecessary = 0b100,

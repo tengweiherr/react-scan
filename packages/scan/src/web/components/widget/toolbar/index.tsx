@@ -80,9 +80,10 @@ export const Toolbar = constant(() => {
   return (
     <div className="flex max-h-9 min-h-9 flex-1 items-stretch overflow-hidden">
       <button
+        type="button"
         title="Inspect element"
         onClick={onToggleInspect}
-        className="flex items-center justify-center px-3"
+        className="button flex items-center justify-center px-3"
         style={{ color: inspectColor }}
       >
         {inspectIcon}
@@ -90,14 +91,19 @@ export const Toolbar = constant(() => {
 
       <button
         id="react-scan-power"
+        type="button"
         title={
           ReactScanInternals.instrumentation?.isPaused.value ? 'Start' : 'Stop'
         }
         onClick={onToggleActive}
-        className={cn('flex items-center justify-center px-3', {
+        className={cn(
+          'button',
+          'flex items-center justify-center px-3',
+          {
           'text-white': !ReactScanInternals.instrumentation?.isPaused.value,
           'text-[#999]': ReactScanInternals.instrumentation?.isPaused.value,
-        })}
+          })
+        }
       >
         <Icon
           name={`icon-${ReactScanInternals.instrumentation?.isPaused.value ? 'eye-off' : 'eye'}`}
@@ -105,14 +111,19 @@ export const Toolbar = constant(() => {
       </button>
       <button
         id="react-scan-sound-toggle"
+        type="button"
         onClick={onSoundToggle}
         title={
           ReactScanInternals.options.value.playSound ? 'Sound On' : 'Sound Off'
         }
-        className={cn('flex items-center justify-center px-3', {
-          'text-white': ReactScanInternals.options.value.playSound,
-          'text-[#999]': !ReactScanInternals.options.value.playSound,
-        })}
+        className={cn(
+          'button',
+          'flex items-center justify-center px-3',
+          {
+            'text-white': ReactScanInternals.options.value.playSound,
+            'text-[#999]': !ReactScanInternals.options.value.playSound,
+          },
+        )}
       >
         <Icon
           name={`icon-${ReactScanInternals.options.value.playSound ? 'volume-on' : 'volume-off'}`}
@@ -134,5 +145,3 @@ export const Toolbar = constant(() => {
     </div>
   );
 });
-
-export default Toolbar;

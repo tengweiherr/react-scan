@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { Store } from '~core/index';
 import { Icon } from '~web/components/icon';
 import {
-  getInspectableElements,
   type InspectableElement,
+  getInspectableElements,
 } from '~web/components/inspector/utils';
 import { cn } from '~web/utils/helpers';
 import { constant } from '~web/utils/preact/constant';
@@ -28,6 +28,7 @@ export const Arrows = constant(() => {
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   const onPreviousFocus = useCallback(() => {
     const currentState = Store.inspectState.value;
     if (currentState.kind !== 'focused' || !currentState.focusedDomElement)
@@ -45,6 +46,7 @@ export const Arrows = constant(() => {
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   const onNextFocus = useCallback(() => {
     const currentState = Store.inspectState.value;
     if (currentState.kind !== 'focused' || !currentState.focusedDomElement)
@@ -59,6 +61,7 @@ export const Arrows = constant(() => {
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
     const unsubscribe = Store.inspectState.subscribe((state) => {
       if (state.kind === 'focused') {
@@ -120,6 +123,7 @@ export const Arrows = constant(() => {
       )}
     >
       <button
+        type="button"
         ref={refButtonPrevious}
         title="Previous element"
         onClick={onPreviousFocus}
@@ -128,6 +132,7 @@ export const Arrows = constant(() => {
         <Icon name="icon-previous" />
       </button>
       <button
+        type="button"
         ref={refButtonNext}
         title="Next element"
         onClick={onNextFocus}

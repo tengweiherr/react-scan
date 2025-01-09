@@ -1,8 +1,8 @@
 import { signal } from '@preact/signals';
-import {
-  type Corner,
-  type WidgetConfig,
-  type WidgetSettings,
+import type {
+  Corner,
+  WidgetConfig,
+  WidgetSettings,
 } from './components/widget/types';
 import { LOCALSTORAGE_KEY, MIN_SIZE, SAFE_AREA } from './constants';
 import { readLocalStorage, saveLocalStorage } from './utils/helpers';

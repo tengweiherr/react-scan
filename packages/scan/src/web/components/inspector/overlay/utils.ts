@@ -1,6 +1,4 @@
-import { FunctionComponentTag } from 'bippy';
-import { type ComponentState } from 'react';
-import { type Fiber } from 'react-reconciler';
+import { type Fiber, FunctionComponentTag, type MemoizedState } from 'bippy';
 import { isEqual } from '~core/utils';
 
 interface ContextDependency<T = unknown> {
@@ -38,21 +36,32 @@ const ensureRecord = (
   value: unknown,
   seen = new WeakSet(),
 ): Record<string, unknown> => {
-  if (value == null) {
+  if (value === null || value === undefined) {
     return {};
   }
-  switch (typeof value) {
-    case 'object':
-      if (value instanceof Element) {
-        return {
-          type: 'Element',
-          tagName: value.tagName.toLowerCase(),
-        };
-      }
-      if (value instanceof Promise || 'then' in value) {
-        return { type: 'promise' };
-      }
-      if (seen.has(value)) {
+
+  switch (true) {
+    case value instanceof Element:
+      return {
+        type: 'Element',
+        tagName: (value as Element).tagName.toLowerCase(),
+      };
+
+    case typeof value === 'function':
+      return {
+        type: 'function',
+        name: (value as { name?: string }).name || 'anonymous',
+      };
+
+    case Boolean(
+      value &&
+        (value instanceof Promise ||
+          (typeof value === 'object' && 'then' in value)),
+    ):
+      return { type: 'promise' };
+
+    case typeof value === 'object': {
+      if (seen.has(value as object)) {
         return { type: 'circular' };
       }
 
@@ -62,14 +71,14 @@ const ensureRecord = (
         return { type: 'array', length: value.length, items: safeArray };
       }
 
-      seen.add(value);
+      seen.add(value as object);
 
       const result: Record<string, unknown> = {};
       try {
-        const keys = Object.keys(value);
+        const keys = Object.keys(value as object);
         for (const key of keys) {
           try {
-            const val = (value as any)[key];
+            const val = (value as Record<string, unknown>)[key];
             result[key] = ensureRecord(val, seen);
           } catch {
             result[key] = {
@@ -82,8 +91,8 @@ const ensureRecord = (
       } catch {
         return { type: 'object' };
       }
-    case 'function':
-      return { type: 'function', name: value.name || 'anonymous' };
+    }
+
     default:
       return { value };
   }
@@ -119,8 +128,7 @@ export const isDirectComponent = (fiber: Fiber): boolean => {
   if (!fiber || !fiber.type) return false;
 
   const isFunctionalComponent = typeof fiber.type === 'function';
-  const isClassComponent =
-    fiber.type.prototype && fiber.type.prototype.isReactComponent;
+  const isClassComponent = fiber.type?.prototype?.isReactComponent ?? false;
 
   if (!(isFunctionalComponent || isClassComponent)) return false;
 
@@ -133,7 +141,9 @@ export const isDirectComponent = (fiber: Fiber): boolean => {
     if (memoizedState.queue) {
       return true;
     }
-    memoizedState = memoizedState.next;
+    const nextState = memoizedState.next;
+    if (!nextState) break;
+    memoizedState = nextState;
   }
 
   return false;
@@ -144,7 +154,7 @@ export const getCurrentState = (fiber: Fiber | null) => {
 
   try {
     if (fiber.tag === FunctionComponentTag && isDirectComponent(fiber)) {
-      return getCurrentFiberState(fiber);
+      return getCurrentFiberState(fiber) ?? {};
     }
   } catch {
     // Silently fail
@@ -190,7 +200,18 @@ export const getChangedState = (fiber: Fiber): Set<string> => {
   return changes;
 };
 
-const getCurrentFiberState = (fiber: Fiber): ComponentState | null => {
+const getStateValue = (memoizedState: MemoizedState): unknown => {
+  if (!memoizedState) return undefined;
+
+  const queue = memoizedState.queue;
+  if (queue) {
+    return queue.lastRenderedState;
+  }
+
+  return memoizedState.memoizedState;
+};
+
+const getCurrentFiberState = (fiber: Fiber): Record<string, unknown> | null => {
   if (fiber.tag !== FunctionComponentTag || !isDirectComponent(fiber)) {
     return null;
   }
@@ -205,7 +226,7 @@ const getCurrentFiberState = (fiber: Fiber): ComponentState | null => {
 
   if (!memoizedState) return null;
 
-  const currentState: ComponentState = {};
+  const currentState: Record<string, unknown> = {};
   const stateNames = getStateNames(fiber);
   let index = 0;
 
@@ -219,30 +240,12 @@ const getCurrentFiberState = (fiber: Fiber): ComponentState | null => {
       }
       index++;
     }
-    memoizedState = memoizedState.next;
+    const nextState = memoizedState.next;
+    if (!nextState) break;
+    memoizedState = nextState;
   }
 
   return currentState;
-};
-
-const getStateValue = (memoizedState: any): any => {
-  let value = memoizedState.memoizedState;
-
-  if (memoizedState.queue?.pending) {
-    const pending = memoizedState.queue.pending;
-    let update = pending.next;
-    do {
-      if (update?.payload) {
-        value =
-          typeof update.payload === 'function'
-            ? update.payload(value)
-            : update.payload;
-      }
-      update = update.next;
-    } while (update !== pending.next);
-  }
-
-  return value;
 };
 
 export const getPropsOrder = (fiber: Fiber): Array<string> => {
@@ -257,10 +260,9 @@ export const getPropsOrder = (fiber: Fiber): Array<string> => {
 };
 
 export const getCurrentProps = (fiber: Fiber): Record<string, unknown> => {
-  const currentIsNewer =
-    fiber && fiber.alternate
-      ? (fiber.actualStartTime ?? 0) > (fiber.alternate?.actualStartTime ?? 0)
-      : true;
+  const currentIsNewer = fiber?.alternate
+    ? (fiber.actualStartTime ?? 0) > (fiber.alternate?.actualStartTime ?? 0)
+    : true;
 
   const baseProps = currentIsNewer
     ? fiber.memoizedProps || fiber.pendingProps
@@ -292,8 +294,10 @@ export const getChangedProps = (fiber: Fiber): Set<string> => {
     if (!isEqual(currentValue, previousValue)) {
       changes.add(key);
 
-      const count = (propsChangeCounts.get(key) ?? 0) + 1;
-      propsChangeCounts.set(key, count);
+      if (typeof currentValue !== 'function') {
+        const count = (propsChangeCounts.get(key) ?? 0) + 1;
+        propsChangeCounts.set(key, count);
+      }
     }
   }
 
@@ -418,7 +422,7 @@ export const getChangedContext = (fiber: Fiber): Set<string> => {
       searchFiber = searchFiber.return;
     }
 
-    if (providerFiber && providerFiber.alternate) {
+    if (providerFiber?.alternate) {
       const currentProviderValue = providerFiber.memoizedProps?.value;
       const alternateValue = providerFiber.alternate.memoizedProps?.value;
 

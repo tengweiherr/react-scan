@@ -58,6 +58,7 @@ export const BtnReplay = () => {
 
   return (
     <button
+      type="button"
       title="Replay component"
       className="react-scan-replay-button"
       onClick={handleReplay}
@@ -67,6 +68,7 @@ export const BtnReplay = () => {
   );
 };
 const useSubscribeFocusedFiber = (onUpdate: () => void) => {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
     const subscribe = () => {
       if (Store.inspectState.value.kind !== 'focused') {
@@ -133,6 +135,7 @@ export const Header = () => {
       />
       <BtnReplay />
       <button
+        type="button"
         title="Close"
         className="react-scan-close-button"
         onClick={handleClose}

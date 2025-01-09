@@ -2,6 +2,12 @@ import { onIdle } from '~web/utils/helpers';
 import { isSSR } from './constants';
 import { Device, type Session } from './types';
 
+interface NetworkInformation {
+  connection?: {
+    effectiveType?: string;
+  };
+}
+
 const getDeviceType = () => {
   const userAgent = navigator.userAgent;
 
@@ -11,7 +17,8 @@ const getDeviceType = () => {
     )
   ) {
     return Device.MOBILE;
-  } else if (/iPad|Tablet/i.test(userAgent)) {
+  }
+  if (/iPad|Tablet/i.test(userAgent)) {
     return Device.TABLET;
   }
   return Device.DESKTOP;
@@ -20,7 +27,7 @@ const getDeviceType = () => {
 /**
  * Measure layout time
  */
-export const doubleRAF = (callback: (...args: Array<any>) => void) => {
+export const doubleRAF = (callback: (...args: unknown[]) => void) => {
   return requestAnimationFrame(() => {
     requestAnimationFrame(callback);
   });
@@ -41,10 +48,10 @@ export const generateId = () => {
  * @see https://deviceandbrowserinfo.com/learning_zone/articles/webgl_renderer_values
  */
 const getGpuRenderer = () => {
-  // Prevent WEBGL_debug_renderer_info deprecation warnings in firefox
-  if (!('chrome' in window)) return '';
+  if (!('chrome' in window)) return ''; // Prevent WEBGL_debug_renderer_info deprecation warnings in firefox
   const gl = document
     .createElement('canvas')
+
     // Get the specs for the fastest GPU available. This helps provide a better
     // picture of the device's capabilities.
     .getContext('webgl', { powerPreference: 'high-performance' });
@@ -68,7 +75,7 @@ export const getSession = async ({
   commit?: string | null;
   branch?: string | null;
 }) => {
-  if (isSSR) return null;
+  if (isSSR()) return null;
   if (cachedSession) {
     return cachedSession;
   }
@@ -81,8 +88,8 @@ export const getSession = async ({
    *
    * @see https://developer.mozilla.org/en-US/docs/Web/API/NetworkInformation/effectiveType
    */
-  const connection = (navigator as any).connection;
-  const wifi = (connection && connection.effectiveType) || null;
+  const connection = (navigator as NetworkInformation).connection;
+  const wifi = connection?.effectiveType ?? null;
   /**
    * Number of CPU threads
    *
@@ -110,7 +117,7 @@ export const getSession = async ({
     url,
     route: null,
     device: getDeviceType(),
-    wifi,
+    wifi: wifi ?? '',
     cpu,
     mem,
     gpu: await gpuRendererPromise,

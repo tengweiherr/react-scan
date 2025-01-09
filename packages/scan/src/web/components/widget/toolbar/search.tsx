@@ -23,6 +23,7 @@ export const Search = () => {
     setIsOpen(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   const handleSelect = useCallback((element: HTMLElement) => {
     Store.inspectState.value = {
       kind: 'focused',
@@ -128,26 +129,29 @@ export const Search = () => {
         ref={listRef}
         className="fixed inset-0 max-h-[calc(100%_-_36px)] overflow-y-auto bg-slate-700 p-2"
       >
-        {filteredElements.map((item, index) => (
-          <div
-            key={index}
-            onClick={() => {
-              handleSelect(item.element);
-            }}
-            className={cn(
-              'flex items-center px-2 py-1 cursor-pointer hover:bg-white/5',
-              selectedIndex === index && 'bg-white/10',
-            )}
-            style={{
-              paddingLeft: `${item.depth * 16 + 8}px`,
-            }}
-          >
-            <span className="truncate">
-              {item.depth > 0 && '└─ '}
-              {item.name}
-            </span>
-          </div>
-        ))}
+        {
+          filteredElements.map((item, index) => (
+            <button
+              type="button"
+              key={`${item.name}-${item.depth}-${index}`}
+              onClick={() => {
+                handleSelect(item.element);
+              }}
+              className={cn(
+                'flex items-center px-2 py-1 cursor-pointer hover:bg-white/5',
+                selectedIndex === index && 'bg-white/10',
+              )}
+              style={{
+                paddingLeft: `${item.depth * 16 + 8}px`,
+              }}
+            >
+              <span className="truncate">
+                {item.depth > 0 && '└─ '}
+                {item.name}
+              </span>
+            </button>
+          ))
+        }
       </div>
     </div>
   );
