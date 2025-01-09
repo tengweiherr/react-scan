@@ -174,7 +174,7 @@ export const debounce = <T extends (enabled: boolean | null) => Promise<void>>(
     }
 
     if (options.trailing !== false) {
-      timeoutId = window.setTimeout(() => {
+      timeoutId = setTimeout(() => {
         isLeadingInvoked = false;
         timeoutId = undefined;
         if (lastArg !== undefined) {
