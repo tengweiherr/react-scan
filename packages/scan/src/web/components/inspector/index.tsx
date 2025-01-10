@@ -100,12 +100,18 @@ interface EditableValueProps {
 
 type IterableEntry = [key: string | number, value: unknown];
 
-const EXPANDED_PATHS = new Set<string>();
-const lastRendered = new Map<string, unknown>();
-let lastInspectedFiber: Fiber | null = null;
-
 const THROTTLE_MS = 16;
 const DEBOUNCE_MS = 150;
+
+const globalInspectorState = {
+  lastRendered: new Map<string, unknown>(),
+  expandedPaths: new Set<string>(),
+  cleanup: () => {
+    globalInspectorState.lastRendered.clear();
+    globalInspectorState.expandedPaths.clear();
+    flashManager.cleanupAll();
+  }
+};
 
 const inspectorState = signal<InspectorState>({
   fiber: null,
@@ -185,7 +191,7 @@ const isEditableValue = (value: unknown, parentPath?: string): boolean => {
     let currentPath = '';
     for (const part of parts) {
       currentPath = currentPath ? `${currentPath}.${part}` : part;
-      const obj = lastRendered.get(currentPath);
+      const obj = globalInspectorState.lastRendered.get(currentPath);
       if (
         obj instanceof DataView ||
         obj instanceof ArrayBuffer ||
@@ -533,8 +539,10 @@ const formatInitialValue = (value: unknown): string => {
 };
 
 const EditableValue = ({ value, onSave, onCancel }: EditableValueProps) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [editValue, setEditValue] = useState(() => {
+  const refInput = useRef<HTMLInputElement>(null);
+  const [editValue, setEditValue] = useState('');
+
+  useEffect(() => {
     let initialValue = '';
     try {
       if (value instanceof Date) {
@@ -552,21 +560,19 @@ const EditableValue = ({ value, onSave, onCancel }: EditableValueProps) => {
       } else {
         initialValue = formatInitialValue(value);
       }
-    } catch (error) {
-      // biome-ignore lint/suspicious/noConsole: Intended debug output
-      console.warn(sanitizeErrorMessage(String(error)));
+    } catch {
       initialValue = String(value);
     }
-    return sanitizeString(initialValue);
-  });
+    setEditValue(sanitizeString(initialValue));
+  }, [value]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    refInput.current?.focus();
 
     if (typeof value === 'string') {
-      inputRef.current?.setSelectionRange(1, inputRef.current.value.length - 1);
+      refInput.current?.setSelectionRange(1, refInput.current.value.length - 1);
     } else {
-      inputRef.current?.select();
+      refInput.current?.select();
     }
   }, [value]);
 
@@ -605,7 +611,7 @@ const EditableValue = ({ value, onSave, onCancel }: EditableValueProps) => {
 
   return (
     <input
-      ref={inputRef}
+      ref={refInput}
       type={value instanceof Date ? 'datetime-local' : 'text'}
       className="react-scan-input flex-1"
       value={editValue}
@@ -681,7 +687,6 @@ const PropertyElement = ({
   allowEditing = true,
 }: PropertyElementProps) => {
   const { fiber } = inspectorState.value;
-
   const refElement = useRef<HTMLDivElement>(null);
 
   const currentPath = getPath(
@@ -690,11 +695,44 @@ const PropertyElement = ({
     parentPath ?? '',
     name,
   );
-  const [isExpanded, setIsExpanded] = useState(EXPANDED_PATHS.has(currentPath));
+  const [isExpanded, setIsExpanded] = useState(globalInspectorState.expandedPaths.has(currentPath));
   const [isEditing, setIsEditing] = useState(false);
 
-  const prevValue = lastRendered.get(currentPath);
+  const prevValue = globalInspectorState.lastRendered.get(currentPath);
   const isChanged = prevValue !== undefined && !isEqual(prevValue, value);
+
+  useEffect(() => {
+    globalInspectorState.lastRendered.set(currentPath, value);
+
+    const isFirstRender = !globalInspectorState.lastRendered.has(currentPath);
+    const shouldFlash =
+      isChanged &&
+      refElement.current &&
+      prevValue !== undefined &&
+      !isFirstRender;
+
+    if (shouldFlash && refElement.current) {
+      flashManager.create(refElement.current);
+    }
+
+    return () => {
+      if (refElement.current) {
+        flashManager.cleanup(refElement.current);
+      }
+    };
+  }, [value, isChanged, currentPath, prevValue]);
+
+  const handleToggleExpand = useCallback(() => {
+    setIsExpanded((prevState: boolean) => {
+      const newIsExpanded = !prevState;
+      if (newIsExpanded) {
+        globalInspectorState.expandedPaths.add(currentPath);
+      } else {
+        globalInspectorState.expandedPaths.delete(currentPath);
+      }
+      return newIsExpanded;
+    });
+  }, [currentPath]);
 
   const renderNestedProperties = useCallback(
     (obj: InspectableValue) => {
@@ -759,31 +797,10 @@ const PropertyElement = ({
     );
   }, [section, overrideProps, overrideHookState, allowEditing, name]);
 
-  useEffect(() => {
-    lastRendered.set(currentPath, value);
-
-    const isFirstRender = !lastRendered.has(currentPath);
-    const shouldFlash =
-      isChanged &&
-      refElement.current &&
-      prevValue !== undefined &&
-      !isFirstRender;
-
-    if (shouldFlash && refElement.current) {
-      flashManager.create(refElement.current);
-    }
-
-    return () => {
-      if (refElement.current) {
-        flashManager.cleanup(refElement.current);
-      }
-    };
-  }, [value, isChanged, currentPath, prevValue]);
-
   const shouldShowWarning = useMemo(() => {
     const shouldShowChange =
-      !lastRendered.has(currentPath) ||
-      !isEqual(lastRendered.get(currentPath), value);
+      !globalInspectorState.lastRendered.has(currentPath) ||
+      !isEqual(globalInspectorState.lastRendered.get(currentPath), value);
 
     const isBadRender =
       level === 0 &&
@@ -796,18 +813,6 @@ const PropertyElement = ({
   }, [level, currentPath, value]);
 
   const clipboardText = useMemo(() => formatForClipboard(value), [value]);
-
-  const handleToggleExpand = useCallback(() => {
-    setIsExpanded((state) => {
-      const newIsExpanded = !state;
-      if (newIsExpanded) {
-        EXPANDED_PATHS.add(currentPath);
-      } else {
-        EXPANDED_PATHS.delete(currentPath);
-      }
-      return newIsExpanded;
-    });
-  }, [currentPath]);
 
   const handleEdit = useCallback(() => {
     if (canEdit) {
@@ -908,8 +913,7 @@ const PropertyElement = ({
         {isExpandable(value) && (
           <button
             type="button"
-            onClick={() => handleToggleExpand()}
-            onKeyDown={(e) => e.key === 'Enter' && handleToggleExpand()}
+            onClick={handleToggleExpand}
             className="react-scan-arrow"
           >
             <Icon
@@ -1016,8 +1020,9 @@ const PropertySection = ({ title, section }: PropertySectionProps) => {
 const WhatChanged = constant(() => {
   const [isExpanded, setIsExpanded] = useState(Store.wasDetailsOpen.value);
   const [shouldShow, setShouldShow] = useState(false);
-  const { changes } = inspectorState.value;
-  const timerRef = useRef<TTimer>();
+  const { changes, fiber } = inspectorState.value;
+  const refTimer = useRef<TTimer>();
+  const refPrevFiber = useRef<Fiber | null>(null);
 
   const hasChanges =
     changes.state.size > 0 ||
@@ -1025,19 +1030,31 @@ const WhatChanged = constant(() => {
     changes.context.size > 0;
 
   useEffect(() => {
-    if (hasChanges) {
-      clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        setShouldShow(true);
-      }, 32); // Two frames delay
-    } else {
+    const cleanup = () => {
+      clearTimeout(refTimer.current);
       setShouldShow(false);
+    };
+
+    if (fiber && refPrevFiber.current && fiber.type !== refPrevFiber.current.type) {
+      cleanup();
+      refPrevFiber.current = fiber;
+      return;
     }
 
-    return () => {
-      clearTimeout(timerRef.current);
-    };
-  }, [hasChanges]);
+    refPrevFiber.current = fiber;
+
+    if (!hasChanges) {
+      cleanup();
+      return;
+    }
+
+    clearTimeout(refTimer.current);
+    refTimer.current = setTimeout(() => {
+      setShouldShow(true);
+    }, 32);
+
+    return cleanup;
+  }, [hasChanges, fiber]);
 
   if (!hasChanges || !shouldShow) {
     return null;
@@ -1142,26 +1159,33 @@ const WhatChanged = constant(() => {
 });
 
 export const Inspector = constant(() => {
+  const refLastInspectedFiber = useRef<Fiber | null>(null);
+
   useEffect(() => {
     let rafId: ReturnType<typeof requestAnimationFrame>;
     let debounceTimer: ReturnType<typeof setTimeout>;
     let lastUpdateTime = 0;
     let isProcessing = false;
     let pendingFiber: Fiber | null = null;
+    let lastInspectedElement: Element | null = null;
 
-    const updateInspectorState = (fiber: Fiber) => {
-      const isNewComponent =
-        !lastInspectedFiber || lastInspectedFiber.type !== fiber.type;
-      if (isNewComponent) {
+    const updateInspectorState = (fiber: Fiber, element: Element) => {
+      const isNewComponent = !refLastInspectedFiber.current ||
+        refLastInspectedFiber.current.type !== fiber.type;
+      const isNewElement = element !== lastInspectedElement;
+
+      if (isNewComponent || isNewElement) {
         resetStateTracking();
+        lastInspectedElement = element;
+        globalInspectorState.cleanup();
       }
 
       inspectorState.value = {
         fiber,
         changes: {
-          props: getChangedProps(fiber),
-          state: getChangedState(fiber),
-          context: getChangedContext(fiber),
+          props: isNewElement ? new Set() : getChangedProps(fiber),
+          state: isNewElement ? new Set() : getChangedState(fiber),
+          context: isNewElement ? new Set() : getChangedContext(fiber),
         },
         current: {
           state: getCurrentState(fiber),
@@ -1170,10 +1194,10 @@ export const Inspector = constant(() => {
         },
       };
 
-      lastInspectedFiber = fiber;
+      refLastInspectedFiber.current = fiber;
     };
 
-    const processFiberUpdate = (fiber: Fiber) => {
+    const processFiberUpdate = (fiber: Fiber, element: Element) => {
       const now = Date.now();
       const timeSinceLastUpdate = now - lastUpdateTime;
 
@@ -1186,7 +1210,7 @@ export const Inspector = constant(() => {
           rafId = requestAnimationFrame(() => {
             if (pendingFiber) {
               isProcessing = true;
-              updateInspectorState(pendingFiber);
+              updateInspectorState(pendingFiber, element);
               isProcessing = false;
               pendingFiber = null;
               lastUpdateTime = Date.now();
@@ -1198,7 +1222,7 @@ export const Inspector = constant(() => {
 
       rafId = requestAnimationFrame(() => {
         isProcessing = true;
-        updateInspectorState(fiber);
+        updateInspectorState(fiber, element);
         isProcessing = false;
         lastUpdateTime = now;
       });
@@ -1209,14 +1233,14 @@ export const Inspector = constant(() => {
         clearTimeout(debounceTimer);
         cancelAnimationFrame(rafId);
         return;
-      };
+      }
 
       const { parentCompositeFiber } = getCompositeFiberFromElement(
         state.focusedDomElement,
       );
       if (!parentCompositeFiber) return;
 
-      processFiberUpdate(parentCompositeFiber);
+      processFiberUpdate(parentCompositeFiber, state.focusedDomElement);
     });
 
     const unSubReport = Store.lastReportTime.subscribe(() => {
@@ -1230,11 +1254,10 @@ export const Inspector = constant(() => {
       }
 
       const element = inspectState.focusedDomElement;
-      const { parentCompositeFiber } =
-        getCompositeFiberFromElement(element);
+      const { parentCompositeFiber } = getCompositeFiberFromElement(element);
 
-      if (parentCompositeFiber && lastInspectedFiber) {
-        processFiberUpdate(parentCompositeFiber);
+      if (parentCompositeFiber && refLastInspectedFiber.current) {
+        processFiberUpdate(parentCompositeFiber, element);
       }
     });
 
@@ -1244,6 +1267,8 @@ export const Inspector = constant(() => {
       clearTimeout(debounceTimer);
       cancelAnimationFrame(rafId);
       pendingFiber = null;
+      lastInspectedElement = null;
+      globalInspectorState.cleanup();
     };
   }, []);
 
@@ -1258,7 +1283,6 @@ export const Inspector = constant(() => {
     </InspectorErrorBoundary>
   );
 });
-
 export const replayComponent = async (fiber: Fiber): Promise<void> => {
   try {
     const { overrideProps, overrideHookState } = getOverrideMethods();
