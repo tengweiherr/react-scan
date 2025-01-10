@@ -54,7 +54,7 @@ export const isElementVisible = (el: Element) => {
   return (
     style.display !== 'none' &&
     style.visibility !== 'hidden' &&
-    style.getPropertyValue('content-visibility') !== 'hidden' &&
+    style.contentVisibility !== 'hidden' &&
     style.opacity !== '0'
   );
 };
@@ -82,7 +82,8 @@ export const isElementInViewport = (
   return isVisible && rect.width && rect.height;
 };
 
-export enum ChangeReason {
+// biome-ignore lint/suspicious/noConstEnum: Using const enum for better performance since it's inlined at compile time and removed from the JS output
+export const enum ChangeReason {
   Props = 0b001,
   State = 0b010,
   Context = 0b100,

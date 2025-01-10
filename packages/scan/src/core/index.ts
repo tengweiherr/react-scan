@@ -733,7 +733,7 @@ export const start = () => {
   }
 };
 
-export const withScan = <T extends {}>(
+export const withScan = <T extends object>(
   component: ComponentType<T>,
   options: Options = {},
 ) => {

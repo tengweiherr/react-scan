@@ -36,32 +36,21 @@ const ensureRecord = (
   value: unknown,
   seen = new WeakSet(),
 ): Record<string, unknown> => {
-  if (value === null || value === undefined) {
+  if (value == null) {
     return {};
   }
-
-  switch (true) {
-    case value instanceof Element:
-      return {
-        type: 'Element',
-        tagName: (value as Element).tagName.toLowerCase(),
-      };
-
-    case typeof value === 'function':
-      return {
-        type: 'function',
-        name: (value as { name?: string }).name || 'anonymous',
-      };
-
-    case Boolean(
-      value &&
-        (value instanceof Promise ||
-          (typeof value === 'object' && 'then' in value)),
-    ):
-      return { type: 'promise' };
-
-    case typeof value === 'object': {
-      if (seen.has(value as object)) {
+  switch (typeof value) {
+    case 'object':
+      if (value instanceof Element) {
+        return {
+          type: 'Element',
+          tagName: value.tagName.toLowerCase(),
+        };
+      }
+      if (value instanceof Promise || 'then' in value) {
+        return { type: 'promise' };
+      }
+      if (seen.has(value)) {
         return { type: 'circular' };
       }
 
@@ -71,11 +60,18 @@ const ensureRecord = (
         return { type: 'array', length: value.length, items: safeArray };
       }
 
-      seen.add(value as object);
+      seen.add(value);
 
+      /*
+       * biome-ignore lint/correctness/noSwitchDeclarations:
+       * Performance optimization:
+       * - Early type-based branching via typeof before expensive instanceof checks
+       * - Single allocation of result object
+       * - Avoids redundant checks in switch-case fallthrough
+       */
       const result: Record<string, unknown> = {};
       try {
-        const keys = Object.keys(value as object);
+        const keys = Object.keys(value);
         for (const key of keys) {
           try {
             const val = (value as Record<string, unknown>)[key];
@@ -91,8 +87,8 @@ const ensureRecord = (
       } catch {
         return { type: 'object' };
       }
-    }
-
+    case 'function':
+      return { type: 'function', name: value.name || 'anonymous' };
     default:
       return { value };
   }

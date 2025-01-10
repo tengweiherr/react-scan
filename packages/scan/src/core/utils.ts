@@ -192,5 +192,6 @@ export interface RenderData {
 }
 
 export function isEqual(a: unknown, b: unknown): boolean {
-  return a === b || (Number.isNaN(a) && Number.isNaN(b));
+  // biome-ignore lint/suspicious/noSelfCompare: reliable way to detect NaN values in JavaScript
+  return a === b || (a !== a && b !== b);
 }
