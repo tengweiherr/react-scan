@@ -33,13 +33,13 @@ export const flush = async (): Promise<void> => {
   for (let i = 0; i < interactions.length; i++) {
     const interaction = interactions[i];
     const timeSinceStart = now - interaction.performanceEntry.startTime;
-    // these interactions were retried enough and should be discarded to avoid mem leak
-    if (timeSinceStart > 30000) {
-      // Skip this iteration
-    } else if (timeSinceStart <= INTERACTION_TIME_TILL_COMPLETED) {
-      pendingInteractions.push(interaction);
-    } else {
-      completedInteractions.push(interaction);
+    if (timeSinceStart <= 30000) {
+      // Skip interactions older than 30 seconds to prevent memory leaks
+      if (timeSinceStart <= INTERACTION_TIME_TILL_COMPLETED) {
+        pendingInteractions.push(interaction);
+      } else {
+        completedInteractions.push(interaction);
+      }
     }
   }
 

@@ -762,13 +762,11 @@ const PropertyElement = ({
   useEffect(() => {
     lastRendered.set(currentPath, value);
 
-    const isSameComponentType = lastInspectedFiber?.type === fiber?.type;
     const isFirstRender = !lastRendered.has(currentPath);
     const shouldFlash =
       isChanged &&
       refElement.current &&
       prevValue !== undefined &&
-      !isSameComponentType &&
       !isFirstRender;
 
     if (shouldFlash && refElement.current) {
@@ -780,7 +778,7 @@ const PropertyElement = ({
         flashManager.cleanup(refElement.current);
       }
     };
-  }, [value, isChanged, currentPath, prevValue, fiber?.type]);
+  }, [value, isChanged, currentPath, prevValue]);
 
   const shouldShowWarning = useMemo(() => {
     const shouldShowChange =

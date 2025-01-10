@@ -8,6 +8,10 @@ interface NetworkInformation {
   };
 }
 
+interface ExtendedNavigator extends Navigator {
+  deviceMemory?: number;
+}
+
 const getDeviceType = () => {
   const userAgent = navigator.userAgent;
 
@@ -103,8 +107,7 @@ export const getSession = async ({
    *
    * @see https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory
    */
-  // @ts-expect-error - deviceMemory is still experimental
-  const mem = navigator.deviceMemory; // GiB ram
+  const mem = (navigator as ExtendedNavigator).deviceMemory ?? 0;
 
   const gpuRendererPromise = new Promise<string | null>((resolve) => {
     onIdle(() => {
