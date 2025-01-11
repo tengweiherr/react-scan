@@ -1256,6 +1256,13 @@ export const Inspector = constant(() => {
       const element = inspectState.focusedDomElement;
       const { parentCompositeFiber } = getCompositeFiberFromElement(element);
 
+      if (!parentCompositeFiber) {
+        Store.inspectState.value = {
+          kind: 'inspect-off',
+        };
+        return;
+      }
+
       if (parentCompositeFiber && refLastInspectedFiber.current) {
         processFiberUpdate(parentCompositeFiber, element);
       }
