@@ -283,6 +283,14 @@ export const ScanOverlay = () => {
       getCompositeComponentFromElement(overlayElement);
     if (!parentCompositeFiber || !targetRect) return;
 
+    if (targetRect.width <= 0 || targetRect.height <= 0 ||
+      targetRect.left < 0 || targetRect.top < 0 ||
+      targetRect.left >= window.innerWidth || targetRect.top >= window.innerHeight ||
+      (targetRect.left === 0 && targetRect.top === 0)) {
+      handleNonHoverableArea();
+      return;
+    }
+
     setupOverlayAnimation(canvas, ctx, targetRect, kind, parentCompositeFiber);
   };
 
@@ -360,8 +368,10 @@ export const ScanOverlay = () => {
   };
 
   const handleNonHoverableArea = () => {
-    if (!refCurrentRect.current || !refCanvas.current || refIsFadingOut.current)
+    if (!refCurrentRect.current || !refCanvas.current || refIsFadingOut.current) {
       return;
+    }
+
     startFadeOut();
   };
 
@@ -369,7 +379,10 @@ export const ScanOverlay = () => {
     const state = Store.inspectState.peek();
     if (state.kind !== 'inspecting' || !refEventCatcher.current) return;
 
+    refEventCatcher.current.style.pointerEvents = 'none';
     const element = document.elementFromPoint(e?.clientX ?? 0, e?.clientY ?? 0);
+    refEventCatcher.current.style.removeProperty('pointer-events');
+
     clearTimeout(refTimeout.current);
 
     if (element && element !== refCanvas.current) {
@@ -497,10 +510,8 @@ export const ScanOverlay = () => {
     refCleanupMap.current.get(state.kind)?.();
 
     if (refEventCatcher.current) {
-      if (state.kind === 'inspecting') {
+      if (state.kind !== 'inspecting') {
         refEventCatcher.current.style.pointerEvents = 'none';
-      } else {
-        refEventCatcher.current.style.removeProperty('pointer-events');
       }
     }
 
@@ -644,8 +655,10 @@ export const ScanOverlay = () => {
         className={cn(
           'fixed inset-0 w-screen h-screen',
           'z-[214748366]',
-          'pointer-events-none',
         )}
+        style={{
+          pointerEvents: 'none',
+        }}
       />
       <canvas
         ref={refCanvas}
