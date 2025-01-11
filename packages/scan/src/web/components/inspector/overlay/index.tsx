@@ -5,6 +5,7 @@ import {
   type States,
   findComponentDOMNode,
   getCompositeComponentFromElement,
+  nonVisualTags,
 } from '~web/components/inspector/utils';
 import { cn, throttle } from '~web/utils/helpers';
 import { lerp } from '~web/utils/lerp';
@@ -283,10 +284,15 @@ export const ScanOverlay = () => {
       getCompositeComponentFromElement(overlayElement);
     if (!parentCompositeFiber || !targetRect) return;
 
-    if (targetRect.width <= 0 || targetRect.height <= 0 ||
-      targetRect.left < 0 || targetRect.top < 0 ||
-      targetRect.left >= window.innerWidth || targetRect.top >= window.innerHeight ||
-      (targetRect.left === 0 && targetRect.top === 0)) {
+    if (
+      targetRect.width <= 0 ||
+      targetRect.height <= 0 ||
+      targetRect.left < 0 ||
+      targetRect.top < 0 ||
+      targetRect.left >= window.innerWidth ||
+      targetRect.top >= window.innerHeight ||
+      (targetRect.left === 0 && targetRect.top === 0)
+    ) {
       handleNonHoverableArea();
       return;
     }
@@ -368,7 +374,11 @@ export const ScanOverlay = () => {
   };
 
   const handleNonHoverableArea = () => {
-    if (!refCurrentRect.current || !refCanvas.current || refIsFadingOut.current) {
+    if (
+      !refCurrentRect.current ||
+      !refCanvas.current ||
+      refIsFadingOut.current
+    ) {
       return;
     }
 
@@ -431,6 +441,14 @@ export const ScanOverlay = () => {
   };
 
   const handleElementClick = (e: MouseEvent) => {
+    const tagName = refLastHoveredElement.current?.tagName;
+    if (tagName && nonVisualTags.has(tagName)) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
     const element =
       refLastHoveredElement.current ??
       document.elementFromPoint(e.clientX, e.clientY);
@@ -469,8 +487,6 @@ export const ScanOverlay = () => {
     }
 
     if (state.kind === 'inspecting') {
-      e.preventDefault();
-      e.stopPropagation();
       handleElementClick(e);
     }
   };

@@ -326,7 +326,7 @@ export const getOverrideMethods = (): OverrideMethods => {
   return { overrideProps, overrideHookState };
 };
 
-const nonVisualTags = new Set([
+export const nonVisualTags = new Set([
   'HTML',
   'HEAD',
   'META',

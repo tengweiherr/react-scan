@@ -4,7 +4,7 @@ import { Store } from '~core/index';
 import { Icon } from '~web/components/icon';
 import { cn, saveLocalStorage } from '~web/utils/helpers';
 import { LOCALSTORAGE_KEY, MIN_SIZE } from '../../constants';
-import { signalRefContainer, signalWidget } from '../../state';
+import { signalRefWidget, signalWidget } from '../../state';
 import {
   calculateNewSizeAndPosition,
   calculatePosition,
@@ -87,10 +87,10 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const container = signalRefContainer.value;
-    if (!container) return;
+    const widget = signalRefWidget.value;
+    if (!widget) return;
 
-    const containerStyle = container.style;
+    const containerStyle = widget.style;
     const { dimensions } = signalWidget.value;
     const initialX = e.clientX;
     const initialY = e.clientY;
@@ -172,10 +172,10 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
       );
 
       const onTransitionEnd = () => {
-        container.removeEventListener('transitionend', onTransitionEnd);
+        widget.removeEventListener('transitionend', onTransitionEnd);
       };
 
-      container.addEventListener('transitionend', onTransitionEnd);
+      widget.addEventListener('transitionend', onTransitionEnd);
       containerStyle.transform = `translate3d(${newPosition.x}px, ${newPosition.y}px, 0)`;
 
       signalWidget.value = {
@@ -214,10 +214,10 @@ export const ResizeHandle = ({ position }: ResizeHandleProps) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const container = signalRefContainer.value;
-    if (!container) return;
+    const widget = signalRefWidget.value;
+    if (!widget) return;
 
-    const containerStyle = container.style;
+    const containerStyle = widget.style;
     const { dimensions, corner } = signalWidget.value;
     const windowDims = getWindowDimensions();
 

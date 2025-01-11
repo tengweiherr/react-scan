@@ -10,7 +10,7 @@ import {
 import { LOCALSTORAGE_KEY, MIN_SIZE, SAFE_AREA } from '../../constants';
 import {
   defaultWidgetConfig,
-  signalRefContainer,
+  signalRefWidget,
   signalWidget,
   updateDimensions,
 } from '../../state';
@@ -27,7 +27,7 @@ import { Toolbar } from './toolbar';
 export const Widget = () => {
   const refShouldExpand = useRef<boolean>(false);
 
-  const refContainer = useRef<HTMLDivElement | null>(null);
+  const refWidget = useRef<HTMLDivElement | null>(null);
   const refContent = useRef<HTMLDivElement>(null);
   const refFooter = useRef<HTMLDivElement>(null);
 
@@ -35,7 +35,7 @@ export const Widget = () => {
   const refInitialMinimizedHeight = useRef<number>(0);
 
   const updateWidgetPosition = useCallback((shouldSave = true) => {
-    if (!refContainer.current) return;
+    if (!refWidget.current) return;
 
     const inspectState = Store.inspectState.value;
     const isInspectFocused = inspectState.kind === 'focused';
@@ -72,7 +72,7 @@ export const Widget = () => {
       newWidth < MIN_SIZE.width || newHeight < MIN_SIZE.height * 5;
     const shouldPersist = shouldSave && !isTooSmall;
 
-    const container = refContainer.current;
+    const container = refWidget.current;
     const containerStyle = container.style;
 
     let rafId: number | null = null;
@@ -129,10 +129,10 @@ export const Widget = () => {
     (e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
       e.preventDefault();
 
-      if (!refContainer.current || (e.target as HTMLElement).closest('button'))
+      if (!refWidget.current || (e.target as HTMLElement).closest('button'))
         return;
 
-      const container = refContainer.current;
+      const container = refWidget.current;
       const containerStyle = container.style;
       const { dimensions } = signalWidget.value;
 
@@ -252,14 +252,14 @@ export const Widget = () => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
-    if (!refContainer.current || !refFooter.current) return;
+    if (!refWidget.current || !refFooter.current) return;
 
-    refContainer.current.style.width = 'min-content';
+    refWidget.current.style.width = 'min-content';
     refInitialMinimizedHeight.current = refFooter.current.offsetHeight;
-    refInitialMinimizedWidth.current = refContainer.current.offsetWidth;
+    refInitialMinimizedWidth.current = refWidget.current.offsetWidth;
 
-    refContainer.current.style.maxWidth = `calc(100vw - ${SAFE_AREA * 2}px)`;
-    refContainer.current.style.maxHeight = `calc(100vh - ${SAFE_AREA * 2}px)`;
+    refWidget.current.style.maxWidth = `calc(100vw - ${SAFE_AREA * 2}px)`;
+    refWidget.current.style.maxHeight = `calc(100vh - ${SAFE_AREA * 2}px)`;
 
     if (Store.inspectState.value.kind !== 'focused') {
       signalWidget.value = {
@@ -274,14 +274,14 @@ export const Widget = () => {
       };
     }
 
-    signalRefContainer.value = refContainer.current;
+    signalRefWidget.value = refWidget.current;
 
     const unsubscribeSignalWidget = signalWidget.subscribe((widget) => {
-      if (!refContainer.current) return;
+      if (!refWidget.current) return;
 
       const { x, y } = widget.dimensions.position;
       const { width, height } = widget.dimensions;
-      const container = refContainer.current;
+      const container = refWidget.current;
 
       requestAnimationFrame(() => {
         container.style.transform = `translate3d(${x}px, ${y}px, 0)`;
@@ -330,7 +330,7 @@ export const Widget = () => {
       <ScanOverlay />
       <div
         id="react-scan-toolbar"
-        ref={refContainer}
+        ref={refWidget}
         onMouseDown={handleDrag}
         className={cn(
           'fixed inset-0 rounded-lg shadow-lg',
