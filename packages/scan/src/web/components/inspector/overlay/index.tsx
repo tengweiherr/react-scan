@@ -288,10 +288,10 @@ export const ScanOverlay = () => {
     if (
       targetRect.width <= 0 ||
       targetRect.height <= 0 ||
-      targetRect.left < 0 ||
-      targetRect.top < 0 ||
       targetRect.left >= window.innerWidth ||
       targetRect.top >= window.innerHeight ||
+      (targetRect.left + targetRect.width <= 0) ||
+      (targetRect.top + targetRect.height <= 0) ||
       (targetRect.left === 0 && targetRect.top === 0)
     ) {
       handleNonHoverableArea();
@@ -503,29 +503,40 @@ export const ScanOverlay = () => {
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+
     const state = Store.inspectState.peek();
     const canvas = refCanvas.current;
-    if (!canvas || e.key !== 'Escape') return;
+    if (!canvas) return;
 
-    switch (state.kind) {
-      case 'focused': {
-        startFadeIn();
-        refCurrentRect.current = null;
-        refLastHoveredElement.current = state.focusedDomElement;
-        Store.inspectState.value = {
-          kind: 'inspecting',
-          hoveredDomElement: state.focusedDomElement,
-        };
-        break;
-      }
-      case 'inspecting': {
-        startFadeOut(() => {
-          signalIsSettingsOpen.value = false;
+    if (document.activeElement?.id === 'react-scan-root') {
+      return;
+    }
+
+    if (state.kind === 'focused' || state.kind === 'inspecting') {
+      e.preventDefault();
+      e.stopPropagation();
+
+      switch (state.kind) {
+        case 'focused': {
+          startFadeIn();
+          refCurrentRect.current = null;
+          refLastHoveredElement.current = state.focusedDomElement;
           Store.inspectState.value = {
-            kind: 'inspect-off',
+            kind: 'inspecting',
+            hoveredDomElement: state.focusedDomElement,
           };
-        });
-        break;
+          break;
+        }
+        case 'inspecting': {
+          startFadeOut(() => {
+            signalIsSettingsOpen.value = false;
+            Store.inspectState.value = {
+              kind: 'inspect-off',
+            };
+          });
+          break;
+        }
       }
     }
   };
@@ -654,7 +665,7 @@ export const ScanOverlay = () => {
       capture: true,
     });
     document.addEventListener('click', handleClick, { capture: true });
-    window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
 
     return () => {
       unsubscribeAll();
@@ -668,7 +679,7 @@ export const ScanOverlay = () => {
       document.removeEventListener('pointerdown', handlePointerDown, {
         capture: true,
       });
-      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, { capture: true });
 
       if (refRafId.current) {
         cancelAnimationFrame(refRafId.current);

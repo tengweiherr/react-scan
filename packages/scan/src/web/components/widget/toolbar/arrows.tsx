@@ -66,7 +66,6 @@ export const Arrows = constant(() => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
     const unsubscribe = Store.inspectState.subscribe((state) => {
-
       if (state.kind === 'focused' && refButtonPrevious.current && refButtonNext.current) {
         refAllElements.current = getInspectableElements();
 
@@ -170,7 +169,8 @@ export const Arrows = constant(() => {
         className={cn(
           'button',
           'flex items-center justify-center',
-          'px-3 opacity-50',
+          'px-3',
+          'opacity-50',
           'transition-all duration-300',
           'cursor-not-allowed',
         )}
