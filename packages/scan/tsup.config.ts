@@ -3,7 +3,9 @@ import fsPromise from 'node:fs/promises';
 import path from 'node:path';
 import { TsconfigPathsPlugin } from '@esbuild-plugins/tsconfig-paths';
 import { init, parse } from 'es-module-lexer';
+import { Plugin } from 'esbuild';
 import { defineConfig } from 'tsup';
+import { workerPlugin } from './worker-plugin';
 
 const DIST_PATH = './dist';
 
@@ -94,6 +96,7 @@ export default defineConfig([
     treeshake: true,
     dts: true,
     minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
+    // minify: false,
 
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
@@ -107,8 +110,10 @@ export default defineConfig([
       'react-router-dom',
       '@remix-run/react',
     ],
+    esbuildPlugins: [workerPlugin],
     loader: {
       '.css': 'text',
+      '.worker.js': 'text',
     },
   },
   {
@@ -165,14 +170,20 @@ export default defineConfig([
       'preact',
       '@preact/signals',
     ],
+    // plugins: [workerPlugin],
     loader: {
       '.css': 'text',
     },
     esbuildPlugins: [
+      workerPlugin,
       TsconfigPathsPlugin({
         tsconfig: path.resolve(__dirname, './tsconfig.json'),
       }),
     ],
+    // esbuildOptions(options) {
+    //   options.plugins = [...(options.plugins || []), workerPlugin];
+    //   return options;
+    // },
   },
   {
     entry: ['./src/cli.mts'],

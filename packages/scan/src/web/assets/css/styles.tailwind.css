@@ -265,9 +265,10 @@ svg {
 
 .react-scan-section {
   @apply flex flex-col;
-  @apply py-2 px-4;
+  @apply py-2 px-2;
   @apply text-[#888];
   @apply before:content-[attr(data-section)] before:text-gray-500;
+  font-size: .75rem;
 
   > .react-scan-property {
     @apply -ml-3.5;
@@ -302,7 +303,7 @@ svg {
 }
 
 .react-scan-key {
-  @apply min-w-8 max-w-60 truncate text-white;
+  @apply w-fit max-w-60 text-white;
 }
 
 .react-scan-input {
@@ -329,11 +330,96 @@ svg {
 }
 
 .react-scan-expandable {
-  @apply grid grid-rows-[0fr];
-  @apply transition-all duration-150;
+  display: grid;
+  grid-template-rows: 0fr;
+  @apply overflow-hidden;
+  @apply transition-all duration-75;
+  transition-timing-function: ease-out;
+
+  > * {
+    min-height: 0;
+  }
 
   &.react-scan-expanded {
-    @apply grid-rows-[1fr];
+    grid-template-rows: 1fr;
+    transition-duration: 100ms;
+  }
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.2);
+  -webkit-transition: .3s;
+  transition: .3s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  -webkit-transition: .3s;
+  transition: .3s;
+}
+
+input:checked + .slider {
+  background-color: #5f3f9a
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #5f3f9a
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(14px);
+  -ms-transform: translateX(14px);
+  transform: translateX(14px);
+}
+
+.slider.round {
+  border-radius: 18px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+
+
+.react-scan-what-changed-expandable {
+  display: grid;
+  grid-template-rows: 0fr;
+  @apply overflow-hidden;
+  @apply transition-all duration-75;
+  transition-timing-function: ease-out;
+
+  > * {
+    min-height: 0;
+  }
+
+  &.react-scan-expanded {
+    grid-template-rows: 1fr;
+    transition-duration: 100ms;
   }
 }
 
@@ -449,4 +535,24 @@ svg {
       @apply flex items-center justify-between gap-x-2;
     }
   }
+}
+
+@keyframes countFlash {
+  0% {
+    background-color: rgba(168, 85, 247, 0.3);
+    transform: scale(1.05);
+  }
+  100% {
+    background-color: rgba(168, 85, 247, 0.1);
+    transform: scale(1);
+  }
+}
+
+.count-badge {
+  background-color: rgba(168, 85, 247, 0.1);
+  transition: all 300ms ease-out;
+}
+
+.count-flash {
+  animation: countFlash 300ms ease-out forwards;
 }

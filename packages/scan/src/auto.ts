@@ -4,7 +4,9 @@ import { init } from './install-hook'; // Initialize RDT hook
 init();
 
 if (typeof window !== 'undefined') {
-  scan({ dangerouslyForceRunInProduction: true });
+  scan({
+    dangerouslyForceRunInProduction: true,
+  });
   window.reactScan = scan;
 }
 

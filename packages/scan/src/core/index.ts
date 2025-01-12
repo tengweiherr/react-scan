@@ -3,6 +3,7 @@ import {
   type Fiber,
   detectReactBuildType,
   getDisplayName,
+  getFiberId,
   getNearestHostFiber,
   getRDTHook,
   getTimings,
@@ -19,22 +20,28 @@ import {
   aggregateRender,
   updateFiberRenderData,
 } from 'src/core/utils';
+// import { initReactScanOverlay } from '~web/overlay';
+import { initReactScanInstrumentation } from 'src/new-outlines';
 import styles from '~web/assets/css/styles.css';
 import { ICONS } from '~web/assets/svgs/svgs';
 import type { States } from '~web/components/inspector/utils';
-import { initReactScanOverlay } from '~web/overlay';
-import { createToolbar } from '~web/toolbar';
+// import { initReactScanOverlay } from '~web/overlay';
+import { createToolbar, scriptLevelToolbar } from '~web/toolbar';
 import { playGeigerClickSound } from '~web/utils/geiger';
 import { readLocalStorage, saveLocalStorage } from '~web/utils/helpers';
 import { log, logIntro } from '~web/utils/log';
 import { type Outline, flushOutlines } from '~web/utils/outline';
-import { type Render, createInstrumentation } from './instrumentation';
+import {
+  ChangeReason,
+  type Render,
+  createInstrumentation,
+} from './instrumentation';
 import type { InternalInteraction } from './monitor/types';
 import type { getSession } from './monitor/utils';
 
 let rootContainer: HTMLDivElement | null = null;
 let shadowRoot: ShadowRoot | null = null;
-let toolbarContainer: HTMLElement | null = null;
+// let toolbarContainer: HTMLElement | null = null;
 let audioContext: AudioContext | null = null;
 
 interface RootContainer {
@@ -76,6 +83,48 @@ const initRootContainer = (): RootContainer => {
 
   return { rootContainer, shadowRoot };
 };
+
+// export interface UnstableOptions {
+//   /**
+//    * Enable/disable scanning
+//    *
+//    * Please use the recommended way:
+//    * enabled: process.env.NODE_ENV === 'development',
+//    *
+//    * @default true
+//    */
+//   enabled?: boolean;
+
+//   /**
+//    * Force React Scan to run in production (not recommended)
+//    *
+//    * @default false
+//    */
+//   dangerouslyForceRunInProduction?: boolean;
+
+//   /**
+//    * Animation speed
+//    *
+//    * @default "fast"
+//    */
+//   animationSpeed?: 'slow' | 'fast' | 'off';
+
+//   /**
+//    * Smoothly animate the re-render outline when the element moves
+//    *
+//    * @default true
+//    */
+//   smoothlyAnimateOutlines?: boolean;
+
+//   /**
+//    * Show toolbar bar
+//    *
+//    * If you set this to true, and set {@link enabled} to false, the toolbar will still show, but scanning will be disabled.
+//    *
+//    * @default true
+//    */
+//   showToolbar?: boolean;
+// }
 
 export interface Options {
   /**
@@ -199,8 +248,6 @@ export type MonitoringOptions = Pick<
   Options,
   | 'includeChildren'
   | 'enabled'
-  | 'renderCountThreshold'
-  | 'resetCountTimeout'
   | 'onCommitStart'
   | 'onCommitFinish'
   | 'onPaintStart'
@@ -226,8 +273,9 @@ export interface StoreType {
   isInIframe: Signal<boolean>;
   monitor: Signal<Monitor | null>;
   fiberRoots: WeakSet<Fiber>;
-  reportData: WeakMap<Fiber, RenderData>;
+  reportData: Map<number, RenderData>;
   legacyReportData: Map<string, RenderData>;
+  changesListeners: Map<number, Array<ChangesListener>>;
 }
 
 export type OutlineKey = `${string}-${string}`;
@@ -243,6 +291,51 @@ export interface Internals {
   Store: StoreType;
 }
 
+export type FunctionalComponentStateChange = {
+  type: ChangeReason.FunctionalState;
+  value: unknown;
+  prevValue?: unknown;
+  count?: number | undefined;
+  name: string;
+};
+export type ClassComponentStateChange = {
+  type: ChangeReason.ClassState;
+  value: unknown;
+  prevValue?: unknown;
+  count?: number | undefined;
+  name: 'state';
+};
+
+export type StateChange =
+  | FunctionalComponentStateChange
+  | ClassComponentStateChange;
+export type PropsChange = {
+  type: ChangeReason.Props;
+  name: string;
+  value: unknown;
+  prevValue?: unknown;
+  count?: number | undefined;
+};
+export type ContextChange = {
+  type: ChangeReason.Context;
+  name: string;
+  value: unknown;
+  prevValue?: unknown;
+  count?: number | undefined;
+  contextType: any;
+};
+
+export type Change = StateChange | PropsChange | ContextChange;
+
+export type ChangesPayload = {
+  propsChanges: Array<PropsChange>;
+  stateChanges: Array<
+    FunctionalComponentStateChange | ClassComponentStateChange
+  >;
+  contextChanges: Array<ContextChange>;
+};
+export type ChangesListener = (changes: ChangesPayload) => void;
+
 export const Store: StoreType = {
   wasDetailsOpen: signal(true),
   isInIframe: signal(
@@ -252,10 +345,11 @@ export const Store: StoreType = {
     kind: 'uninitialized',
   }),
   monitor: signal<Monitor | null>(null),
-  fiberRoots: new WeakSet<Fiber>(),
-  reportData: new WeakMap<Fiber, RenderData>(),
+  fiberRoots: new Set<Fiber>(),
+  reportData: new Map<number, RenderData>(),
   legacyReportData: new Map<string, RenderData>(),
   lastReportTime: signal(0),
+  changesListeners: new Map<number, Array<ChangesListener>>(),
 };
 
 export const ReactScanInternals: Internals = {
@@ -281,7 +375,7 @@ export const ReactScanInternals: Internals = {
   Store,
 };
 
-type LocalStorageOptions = Omit<
+export type LocalStorageOptions = Omit<
   Options,
   | 'onCommitStart'
   | 'onRender'
@@ -305,11 +399,10 @@ const validateOptions = (options: Partial<Options>): Partial<Options> => {
     switch (key) {
       case 'enabled':
       case 'includeChildren':
-      case 'playSound':
-      case 'log':
+      // case 'log':
       case 'showToolbar':
-      case 'report':
-      case 'alwaysShowLabels':
+      // case 'report':
+      // case 'alwaysShowLabels':
       case 'dangerouslyForceRunInProduction':
         if (typeof value !== 'boolean') {
           errors.push(`- ${key} must be a boolean. Got "${value}"`);
@@ -317,14 +410,14 @@ const validateOptions = (options: Partial<Options>): Partial<Options> => {
           validOptions[key] = value;
         }
         break;
-      case 'renderCountThreshold':
-      case 'resetCountTimeout':
-        if (typeof value !== 'number' || value < 0) {
-          errors.push(`- ${key} must be a non-negative number. Got "${value}"`);
-        } else {
-          validOptions[key] = value as number;
-        }
-        break;
+      // case 'renderCountThreshold':
+      // case 'resetCountTimeout':
+      //   if (typeof value !== 'number' || value < 0) {
+      //     errors.push(`- ${key} must be a non-negative number. Got "${value}"`);
+      //   } else {
+      //     validOptions[key] = value as number;
+      //   }
+      //   break;
       case 'animationSpeed':
         if (!['slow', 'fast', 'off'].includes(value as string)) {
           errors.push(
@@ -366,11 +459,11 @@ const validateOptions = (options: Partial<Options>): Partial<Options> => {
           validOptions[key] = value as (outlines: Array<Outline>) => void;
         }
         break;
-      case 'trackUnnecessaryRenders': {
-        validOptions.trackUnnecessaryRenders =
-          typeof value === 'boolean' ? value : false;
-        break;
-      }
+      // case 'trackUnnecessaryRenders': {
+      //   validOptions.trackUnnecessaryRenders =
+      //     typeof value === 'boolean' ? value : false;
+      //   break;
+      // }
       case 'smoothlyAnimateOutlines': {
         validOptions.smoothlyAnimateOutlines =
           typeof value === 'boolean' ? value : false;
@@ -408,10 +501,6 @@ export const setOptions = (userOptions: Partial<Options>) => {
     return;
   }
 
-  if ('playSound' in validOptions && validOptions.playSound) {
-    validOptions.enabled = true;
-  }
-
   const newOptions = {
     ...ReactScanInternals.options.value,
     ...validOptions,
@@ -424,155 +513,23 @@ export const setOptions = (userOptions: Partial<Options>) => {
 
   ReactScanInternals.options.value = newOptions;
 
-  saveLocalStorage('react-scan-options', newOptions);
+  const existingLocalStorageOptions =
+    readLocalStorage<LocalStorageOptions>('react-scan-options');
+  // we always want to persist the local storage option specifically for enabled to avoid annoying the user
+  // if the user doesn't have a toolbar we fallback to the true options because there wouldn't be a way to
+  // revert the local storage value
+  saveLocalStorage('react-scan-options', {
+    ...newOptions,
+    enabled: newOptions.showToolbar
+      ? (existingLocalStorageOptions?.enabled ?? newOptions.enabled ?? true)
+      : newOptions.enabled,
+  });
 
-  if ('showToolbar' in validOptions) {
-    if (toolbarContainer && !newOptions.showToolbar) {
-      toolbarContainer.remove();
-    }
-
-    const { shadowRoot } = initRootContainer();
-    if (newOptions.showToolbar && shadowRoot) {
-      toolbarContainer = createToolbar(shadowRoot);
-    }
-  }
+  return newOptions;
 };
 
 export const getOptions = () => ReactScanInternals.options;
 
-export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
-  const reportFiber = fiber;
-  const { selfTime } = getTimings(fiber);
-  const displayName = getDisplayName(fiber.type);
-
-  // Get data from both current and alternate fibers
-  const currentData = Store.reportData.get(reportFiber);
-  const alternateData = fiber.alternate
-    ? Store.reportData.get(fiber.alternate)
-    : null;
-
-  // More efficient null checks and Math.max
-  const existingCount = Math.max(
-    currentData?.count ?? 0,
-    alternateData?.count ?? 0,
-  );
-
-  // Create single shared object for both fibers
-  const fiberData: RenderData = {
-    count: existingCount + renders.length,
-    time: selfTime || 0,
-    renders,
-    displayName,
-    type: (getType(fiber.type) as ComponentType<unknown> | null) || null,
-  };
-
-  // Store in both fibers
-  Store.reportData.set(reportFiber, fiberData);
-  if (fiber.alternate) {
-    Store.reportData.set(fiber.alternate, fiberData);
-  }
-
-  if (displayName && ReactScanInternals.options.value.report) {
-    const existingLegacyData = Store.legacyReportData.get(displayName) ?? {
-      count: 0,
-      time: 0,
-      renders: [],
-      displayName: null,
-      type: getType(fiber.type) || fiber.type,
-    };
-
-    existingLegacyData.count = existingLegacyData.count + renders.length;
-    existingLegacyData.time = existingLegacyData.time + (selfTime || 0);
-    existingLegacyData.renders = renders;
-
-    Store.legacyReportData.set(displayName, existingLegacyData);
-  }
-
-  Store.lastReportTime.value = Date.now();
-};
-
-export const isValidFiber = (fiber: Fiber) => {
-  const props = fiber.memoizedProps;
-  if (typeof props === 'object' && props !== null && ignoredProps.has(props)) {
-    return false;
-  }
-
-  const allowList = ReactScanInternals.componentAllowList;
-  const shouldAllow =
-    allowList?.has(fiber.type) ?? allowList?.has(fiber.elementType);
-
-  if (shouldAllow) {
-    const parent = traverseFiber(
-      fiber,
-      (node) => {
-        const options =
-          allowList?.get(node.type) ?? allowList?.get(node.elementType);
-        return options?.includeChildren;
-      },
-      true,
-    );
-    if (!parent && !shouldAllow) return false;
-  }
-  return true;
-};
-
-let flushInterval: ReturnType<typeof setInterval> | null = null;
-const startFlushOutlineInterval = () => {
-  if (flushInterval) {
-    clearInterval(flushInterval);
-  }
-  flushInterval = setInterval(() => {
-    requestAnimationFrame(() => {
-      flushOutlines();
-    });
-  }, 30);
-};
-
-const updateScheduledOutlines = (fiber: Fiber, renders: Array<Render>) => {
-  for (let i = 0, len = renders.length; i < len; i++) {
-    const render = renders[i];
-    const domFiber = getNearestHostFiber(fiber);
-    if (
-      !domFiber ||
-      !domFiber.stateNode ||
-      !(domFiber.stateNode instanceof Element)
-    )
-      continue;
-
-    if (ReactScanInternals.scheduledOutlines.has(fiber)) {
-      const existingOutline = ReactScanInternals.scheduledOutlines.get(fiber);
-      if (existingOutline) {
-        aggregateRender(render, existingOutline.aggregatedRender);
-      }
-    } else {
-      ReactScanInternals.scheduledOutlines.set(fiber, {
-        domNode: domFiber.stateNode,
-        aggregatedRender: {
-          computedCurrent: null,
-          name:
-            renders.find((render) => render.componentName)?.componentName ??
-            'N/A',
-          aggregatedCount: 1,
-          changes: aggregateChanges(render.changes),
-          didCommit: render.didCommit,
-          forget: render.forget,
-          fps: render.fps,
-          phase: render.phase,
-          time: render.time,
-          unnecessary: render.unnecessary,
-          frame: 0,
-          computedKey: null,
-        },
-        alpha: null,
-        groupedAggregatedRender: null,
-        target: null,
-        current: null,
-        totalFrames: null,
-        estimatedTextWidth: null,
-      });
-    }
-  }
-};
 // we only need to run this check once and will read the value in hot path
 let isProduction: boolean | null = null;
 let rdtHook: ReturnType<typeof getRDTHook>;
@@ -591,7 +548,9 @@ export const getIsProduction = () => {
 };
 
 export const start = () => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') {
+    return;
+  }
 
   if (
     getIsProduction() &&
@@ -604,8 +563,9 @@ export const start = () => {
     readLocalStorage<LocalStorageOptions>('react-scan-options');
 
   if (localStorageOptions) {
-    const { enabled, playSound } = localStorageOptions;
-    const validLocalOptions = validateOptions({ enabled, playSound });
+    const { enabled } = localStorageOptions;
+    const validLocalOptions = validateOptions({ enabled });
+
     if (Object.keys(validLocalOptions).length > 0) {
       ReactScanInternals.options.value = {
         ...ReactScanInternals.options.value,
@@ -614,118 +574,15 @@ export const start = () => {
     }
   }
 
-  let ctx: ReturnType<typeof initReactScanOverlay> | null = null;
+  const options = getOptions();
 
-  const instrumentation = createInstrumentation('devtools', {
-    onActive() {
-      const existingRoot = document.querySelector('react-scan-root');
-      if (existingRoot) {
-        return;
-      }
+  idempotent_createToolbar(!!options.value.showToolbar);
+  initReactScanInstrumentation();
 
-      // Create audio context on first user interaction
-      const createAudioContextOnInteraction = () => {
-        audioContext = new (
-          window.AudioContext ||
-          // @ts-expect-error -- This is a fallback for Safari
-          window.webkitAudioContext
-        )();
-
-        void audioContext.resume();
-      };
-
-      window.addEventListener('pointerdown', createAudioContextOnInteraction, {
-        once: true,
-      });
-
-      const { shadowRoot } = initRootContainer();
-
-      ctx = initReactScanOverlay();
-      if (!ctx) return;
-      startFlushOutlineInterval();
-
-      globalThis.__REACT_SCAN__ = {
-        ReactScanInternals,
-      };
-
-      if (ReactScanInternals.options.value.showToolbar) {
-        toolbarContainer = createToolbar(shadowRoot);
-      }
-
-      logIntro();
-    },
-    onCommitStart() {
-      ReactScanInternals.options.value.onCommitStart?.();
-    },
-    onError(error) {
-      // biome-ignore lint/suspicious/noConsole: Intended debug output
-      console.error('[React Scan] Error instrumenting:', error);
-    },
-    isValidFiber,
-    onRender(fiber, renders) {
-      // todo: don't track renders at all if paused, reduce overhead
-      if (
-        (Boolean(ReactScanInternals.instrumentation?.isPaused.value) &&
-          (Store.inspectState.value.kind === 'inspect-off' ||
-            Store.inspectState.value.kind === 'uninitialized')) ||
-        !ctx ||
-        document.visibilityState !== 'visible'
-      ) {
-        // don't draw if it's paused or tab is not active
-        return;
-      }
-
-      updateFiberRenderData(fiber, renders);
-      if (ReactScanInternals.options.value.log) {
-        // this can be expensive given enough re-renders
-        log(renders);
-      }
-
-      if (isCompositeFiber(fiber)) {
-        // report render has a non trivial cost because it calls Date.now(), so we want to avoid the computation if possible
-        if (
-          ReactScanInternals.options.value.showToolbar !== false &&
-          Store.inspectState.value.kind === 'focused'
-        ) {
-          reportRender(fiber, renders);
-        }
-      }
-
-      if (ReactScanInternals.options.value.log) {
-        renders;
-      }
-
-      ReactScanInternals.options.value.onRender?.(fiber, renders);
-
-      updateScheduledOutlines(fiber, renders);
-      for (let i = 0, len = renders.length; i < len; i++) {
-        const render = renders[i];
-
-        if (ReactScanInternals.options.value.playSound && audioContext) {
-          const renderTimeThreshold = 10;
-          const amplitude = Math.min(
-            1,
-            ((render.time ?? 0) - renderTimeThreshold) /
-              (renderTimeThreshold * 2),
-          );
-          playGeigerClickSound(audioContext, amplitude);
-        }
-      }
-    },
-    onCommitFinish() {
-      ReactScanInternals.options.value.onCommitFinish?.();
-    },
-    trackChanges: true,
-  });
-
-  ReactScanInternals.instrumentation = instrumentation;
-
-  // TODO: add an visual error indicator that it didn't load
   const isUsedInBrowserExtension = typeof window !== 'undefined';
   if (!Store.monitor.value && !isUsedInBrowserExtension) {
     setTimeout(() => {
       if (isInstrumentationActive()) return;
-      // biome-ignore lint/suspicious/noConsole: Intended debug output
       console.error(
         '[React Scan] Failed to load. Must import React Scan before React runs.',
       );
@@ -733,35 +590,72 @@ export const start = () => {
   }
 };
 
+const idempotent_createToolbar = (showToolbar: boolean) => {
+  const windowToolbarContainer = window.__REACT_SCAN_TOOLBAR_CONTAINER__;
+
+  if (!showToolbar) {
+    windowToolbarContainer?.remove();
+    return;
+  }
+
+  // allows us to override toolbar by pasting a new script in console
+  if (!scriptLevelToolbar && windowToolbarContainer) {
+    windowToolbarContainer.remove();
+    const { shadowRoot } = initRootContainer();
+    createToolbar(shadowRoot);
+    return;
+  }
+
+  if (scriptLevelToolbar && windowToolbarContainer) {
+    // then a toolbar already exists and is subscribed to the correct instrumentation
+    return;
+  }
+
+  // then we are creating a toolbar for the first time
+  const { shadowRoot } = initRootContainer();
+  createToolbar(shadowRoot);
+};
+/**
+ * @deprecated
+ */
 export const withScan = <T extends object>(
   component: ComponentType<T>,
   options: Options = {},
 ) => {
-  setOptions(options);
-  const isInIframe = Store.isInIframe.value;
-  const componentAllowList = ReactScanInternals.componentAllowList;
-  if (isInIframe || (options.enabled === false && options.showToolbar !== true))
-    return component;
-  if (!componentAllowList) {
-    ReactScanInternals.componentAllowList = new WeakMap<
-      ComponentType<unknown>,
-      Options
-    >();
-  }
-  if (componentAllowList) {
-    componentAllowList.set(component as ComponentType<unknown>, { ...options });
-  }
-
-  start();
-
   return component;
+  // const isInIframe = Store.isInIframe.value;
+  // let componentAllowList = ReactScanInternals.componentAllowList;
+
+  // if (
+  //   isInIframe ||
+  //   (options.enabled === false && options.showToolbar !== true)
+  // ) {
+  //   return component;
+  // }
+
+  // if (!componentAllowList) {
+  //   componentAllowList = new WeakMap<ComponentType<unknown>, Options>();
+  //   ReactScanInternals.componentAllowList = componentAllowList;
+  // }
+
+  // componentAllowList.set(component as ComponentType<unknown>, { ...options });
+
+  // start();
+
+  // return component;
 };
 
 export const scan = (options: Options = {}) => {
   setOptions(options);
   const isInIframe = Store.isInIframe.value;
-  if (isInIframe || (options.enabled === false && options.showToolbar !== true))
+
+  if (isInIframe) {
     return;
+  }
+
+  if (options.enabled === false && options.showToolbar !== true) {
+    return;
+  }
 
   start();
 };
@@ -783,7 +677,6 @@ export const onRender = (
     }
   };
 };
-
 
 export const ignoredProps = new WeakSet<
   Exclude<ReactNode, undefined | null | string | number | boolean | bigint>

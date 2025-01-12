@@ -1,10 +1,12 @@
-import { type Fiber, getDisplayName } from 'bippy';
+import { type Fiber, getDisplayName, getFiberId } from 'bippy';
 import { useEffect, useRef } from 'preact/hooks';
 import { ReactScanInternals, Store } from '~core/index';
 import {
   type States,
   findComponentDOMNode,
+  getAssociatedFiberRect,
   getCompositeComponentFromElement,
+  // getCurrentCompositeComponentFromElement,
   nonVisualTags,
 } from '~web/components/inspector/utils';
 import { signalIsSettingsOpen } from '~web/state';
@@ -46,7 +48,7 @@ export const ScanOverlay = () => {
   const refEventCatcher = useRef<HTMLDivElement>(null);
   const refCurrentRect = useRef<Rect | null>(null);
   const refCurrentLockIconRect = useRef<LockIconRect | null>(null);
-  const refLastHoveredElement = useRef<HTMLElement | null>(null);
+  const refLastHoveredElement = useRef<Element | null>(null);
   const refRafId = useRef<number>(0);
   const refTimeout = useRef<TTimer>();
   const refCleanupMap = useRef(
@@ -98,10 +100,9 @@ export const ScanOverlay = () => {
     fiber: Fiber | null,
   ) => {
     if (!fiber) return;
+    const fiberId = getFiberId(fiber);
 
-    const reportDataFiber =
-      Store.reportData.get(fiber) ??
-      (fiber.alternate ? Store.reportData.get(fiber.alternate) : null);
+    const reportDataFiber = Store.reportData.get(fiberId);
 
     const stats = {
       count: reportDataFiber?.count ?? 0,
@@ -273,28 +274,23 @@ export const ScanOverlay = () => {
     animate(canvas, ctx, targetRect, kind, parentCompositeFiber);
   };
 
-  const drawHoverOverlay = (
-    overlayElement: HTMLElement | null,
+  const drawHoverOverlay = async (
+    overlayElement: Element | null,
     canvas: HTMLCanvasElement | null,
     ctx: CanvasRenderingContext2D | null,
     kind: DrawKind,
   ) => {
     if (!overlayElement || !canvas || !ctx) return;
 
-    const { parentCompositeFiber, targetRect } =
+    const { parentCompositeFiber } =
       getCompositeComponentFromElement(overlayElement);
+    const targetRect = await getAssociatedFiberRect(overlayElement);
+
     if (!parentCompositeFiber || !targetRect) return;
 
-    if (
-      targetRect.width <= 0 ||
-      targetRect.height <= 0 ||
-      targetRect.left >= window.innerWidth ||
-      targetRect.top >= window.innerHeight ||
-      (targetRect.left + targetRect.width <= 0) ||
-      (targetRect.top + targetRect.height <= 0) ||
-      (targetRect.left === 0 && targetRect.top === 0)
-    ) {
+    if (targetRect.width <= 0 || targetRect.height <= 0) {
       handleNonHoverableArea();
+
       return;
     }
 
@@ -367,7 +363,7 @@ export const ScanOverlay = () => {
     });
   };
 
-  const handleHoverableElement = (componentElement: HTMLElement) => {
+  const handleHoverableElement = (componentElement: Element) => {
     if (componentElement === refLastHoveredElement.current) return;
 
     refLastHoveredElement.current = componentElement;
@@ -402,13 +398,15 @@ export const ScanOverlay = () => {
 
     refEventCatcher.current.style.pointerEvents = 'none';
     const element = document.elementFromPoint(e?.clientX ?? 0, e?.clientY ?? 0);
+
+    // if (element.title)
     refEventCatcher.current.style.removeProperty('pointer-events');
 
     clearTimeout(refTimeout.current);
 
     if (element && element !== refCanvas.current) {
       const { parentCompositeFiber } = getCompositeComponentFromElement(
-        element as HTMLElement,
+        element as Element,
       );
       if (parentCompositeFiber) {
         const componentElement = findComponentDOMNode(parentCompositeFiber);
@@ -452,6 +450,18 @@ export const ScanOverlay = () => {
   };
 
   const handleElementClick = (e: MouseEvent) => {
+    const clickableElements = [
+      'react-scan-inspect-element',
+      'react-scan-power',
+    ];
+    // avoid capturing the synthetic event sent back to the toolbar, we don't want to block click events on it ever
+    if (
+      e.target instanceof HTMLElement &&
+      clickableElements.includes(e.target.id)
+    ) {
+      return;
+    }
+
     const tagName = refLastHoveredElement.current?.tagName;
     if (tagName && nonVisualTags.has(tagName)) {
       return;
@@ -465,12 +475,25 @@ export const ScanOverlay = () => {
       document.elementFromPoint(e.clientX, e.clientY);
     if (!element) return;
 
+    const clickedEl = e.composedPath().at(0);
+
+    if (
+      clickedEl instanceof HTMLElement &&
+      clickableElements.includes(clickedEl.id)
+    ) {
+      const syntheticEvent = new MouseEvent(e.type, e);
+      // @ts-ignore - this allows to know to not re-process this event when this event handler captures it
+      syntheticEvent.__reactScanSyntheticEvent = true;
+      clickedEl.dispatchEvent(syntheticEvent);
+      return;
+    }
     const { parentCompositeFiber } = getCompositeComponentFromElement(
-      element as HTMLElement,
+      element as Element,
     );
     if (!parentCompositeFiber) return;
 
     const componentElement = findComponentDOMNode(parentCompositeFiber);
+
     if (!componentElement) {
       refLastHoveredElement.current = null;
       Store.inspectState.value = {
@@ -486,6 +509,11 @@ export const ScanOverlay = () => {
   };
 
   const handleClick = (e: MouseEvent) => {
+    // @ts-ignore - metadata added to toolbar button events we create and dispatch
+    if (e.__reactScanSyntheticEvent) {
+      return;
+    }
+
     const state = Store.inspectState.peek();
     const canvas = refCanvas.current;
     if (!canvas || !refEventCatcher.current) return;
@@ -503,6 +531,7 @@ export const ScanOverlay = () => {
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
+
     if (e.key !== 'Escape') return;
 
     const state = Store.inspectState.peek();
@@ -692,10 +721,7 @@ export const ScanOverlay = () => {
     <>
       <div
         ref={refEventCatcher}
-        className={cn(
-          'fixed inset-0 w-screen h-screen',
-          'z-[214748366]',
-        )}
+        className={cn('fixed inset-0 w-screen h-screen', 'z-[214748365]')}
         style={{
           pointerEvents: 'none',
         }}

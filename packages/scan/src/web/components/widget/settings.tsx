@@ -5,6 +5,18 @@ import { useDelayedValue } from '~web/hooks/use-mount-delay';
 import { signalIsSettingsOpen } from '~web/state';
 import { cn } from '~web/utils/helpers';
 
+// todo settings
+/**
+ * 
+ * - chose a component to inspect, persist page refresh, could have a reactive listener... or can do it in an interval to avoid accidently doing to heavy of logic
+ * an abstraction is likely needed to read debounced/ non memory leaked state, eh todo 
+ * - only show on a certain page
+ * lets see what else ca we do..........
+ * unnecessary renders is good
+ * animation speed perchance?
+ * minimal mode
+ * magnetic behavior
+ */
 export const Settings = () => {
   const isSettingsOpen = signalIsSettingsOpen.value;
   const isMounted = useDelayedValue(isSettingsOpen, 0, 1000);

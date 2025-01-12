@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ChangeReason, type Render } from '~core/instrumentation';
 import { getLabelText } from '~core/utils';
 

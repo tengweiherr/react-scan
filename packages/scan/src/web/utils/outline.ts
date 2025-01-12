@@ -65,6 +65,10 @@ export const recalcOutlines = throttle(async () => {
 // batchGetBoundingRects function can return in sub <10ms under good conditions, but may take much longer under poor conditions.
 // We interpolate the outline rects to avoid the appearance of jitter
 // reference: https://w3c.github.io/IntersectionObserver/
+/**
+ *
+ * @deprecated use getBatchedRectMap
+ */
 export const batchGetBoundingRects = (
   elements: Array<Element>,
 ): Promise<Map<Element, DOMRect>> => {
@@ -105,7 +109,7 @@ export const flushOutlines = async () => {
   recalcOutlines();
 
   ReactScanInternals.scheduledOutlines = new Map();
-  ReactScanInternals.options.value.onPaintStart?.(flattenedScheduledOutlines);
+  // ReactScanInternals.options.value.onPaintStart?.(flattenedScheduledOutlines);
 
   if (!animationFrameId) {
     animationFrameId = requestAnimationFrame(fadeOutOutline);

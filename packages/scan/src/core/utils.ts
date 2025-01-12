@@ -1,11 +1,12 @@
+// @ts-nocheck
 import { type Fiber, getType } from 'bippy';
-import type { ComponentType } from 'preact';
+// import type { ComponentType } from 'preact';
 import { ReactScanInternals } from '~core/index';
 import type { AggregatedRender } from '~web/utils/outline';
-import type { AggregatedChange, Render, RenderChange } from './instrumentation';
+import type { AggregatedChange, Render } from './instrumentation';
 
 export const aggregateChanges = (
-  changes: Array<RenderChange>,
+  changes: Array<Change>,
   prevAggregatedChange?: AggregatedChange,
 ) => {
   const newChange = {
@@ -187,7 +188,7 @@ export interface RenderData {
   time: number;
   renders: Array<Render>;
   displayName: string | null;
-  type: ComponentType<unknown> | null;
+  type: any;
   changes?: Array<RenderChange>;
 }
 

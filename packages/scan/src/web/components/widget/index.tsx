@@ -386,7 +386,7 @@ export const Widget = () => {
               )}
             >
               <Inspector />
-              <Settings />
+              {/* <Settings /> */}
             </div>
           </div>
 

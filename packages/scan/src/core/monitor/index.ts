@@ -116,7 +116,7 @@ export const startMonitoring = () => {
   };
   const instrumentation = createInstrumentation('monitoring', {
     onCommitStart() {
-      ReactScanInternals.options.value.onCommitStart?.();
+      // ReactScanInternals.options.value.onCommitStart?.();
     },
     onError() {
       // todo: report to server?
@@ -130,10 +130,10 @@ export const startMonitoring = () => {
       if (isCompositeFiber(fiber)) {
         aggregateComponentRenderToInteraction(fiber, renders);
       }
-      ReactScanInternals.options.value.onRender?.(fiber, renders);
+      // ReactScanInternals.options.value.onRender?.(fiber, renders);
     },
     onCommitFinish() {
-      ReactScanInternals.options.value.onCommitFinish?.();
+      // ReactScanInternals.options.value.onCommitFinish?.();
     },
     trackChanges: false,
     forceAlwaysTrackRenders: true,

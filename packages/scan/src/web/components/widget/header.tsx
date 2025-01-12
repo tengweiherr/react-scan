@@ -1,7 +1,6 @@
-import { getDisplayName } from 'bippy';
+import { getDisplayName, getFiberId } from 'bippy';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Store } from '~core/index';
-import { replayComponent } from '~web/components/inspector';
 import { signalIsSettingsOpen } from '~web/state';
 import { cn } from '~web/utils/helpers';
 import { Icon } from '../icon';
@@ -9,6 +8,7 @@ import {
   getCompositeComponentFromElement,
   getOverrideMethods,
 } from '../inspector/utils';
+import { Arrows } from './toolbar/arrows';
 
 const REPLAY_DELAY_MS = 300;
 
@@ -33,39 +33,38 @@ export const BtnReplay = () => {
     });
   }, []);
 
+  // const handleReplay = (e: MouseEvent) => {
+  //   e.stopPropagation();
+  //   const { overrideProps, overrideHookState } = getOverrideMethods();
+  //   const state = replayState.current;
+  //   const button = e.currentTarget as HTMLElement;
 
-  const handleReplay = (e: MouseEvent) => {
-    e.stopPropagation();
-    const { overrideProps, overrideHookState } = getOverrideMethods();
-    const state = replayState.current;
-    const button = e.currentTarget as HTMLElement;
+  //   const inspectState = Store.inspectState.value;
+  //   if (state.isReplaying || inspectState.kind !== 'focused') return;
 
-    const inspectState = Store.inspectState.value;
-    if (state.isReplaying || inspectState.kind !== 'focused') return;
+  //   const { parentCompositeFiber } = getCompositeComponentFromElement(
+  //     inspectState.focusedDomElement,
+  //   );
+  //   if (!parentCompositeFiber || !overrideProps || !overrideHookState) return;
 
-    const { parentCompositeFiber } = getCompositeComponentFromElement(
-      inspectState.focusedDomElement,
-    );
-    if (!parentCompositeFiber || !overrideProps || !overrideHookState) return;
+  //   state.isReplaying = true;
+  //   state.toggleDisabled(true, button);
 
-    state.isReplaying = true;
-    state.toggleDisabled(true, button);
-
-    void replayComponent(parentCompositeFiber)
-      .catch(() => void 0)
-      .finally(() => {
-        clearTimeout(refTimeout.current);
-        if (document.hidden) {
-          state.isReplaying = false;
-          state.toggleDisabled(false, button);
-        } else {
-          refTimeout.current = setTimeout(() => {
-            state.isReplaying = false;
-            state.toggleDisabled(false, button);
-          }, REPLAY_DELAY_MS);
-        }
-      });
-  };
+  //   void replayComponent(parentCompositeFiber)
+  //     .catch(() => void 0)
+  //     .finally(() => {
+  //       clearTimeout(refTimeout.current);
+  //       if (document.hidden) {
+  //         state.isReplaying = false;
+  //         state.toggleDisabled(false, button);
+  //       } else {
+  //         refTimeout.current = setTimeout(() => {
+  //           state.isReplaying = false;
+  //           state.toggleDisabled(false, button);
+  //         }, REPLAY_DELAY_MS);
+  //       }
+  //     });
+  // };
 
   if (!canEdit) return null;
 
@@ -73,13 +72,10 @@ export const BtnReplay = () => {
     <button
       type="button"
       title="Replay component"
-      onClick={handleReplay}
-      className={cn(
-        'react-scan-replay-button',
-        {
-          'opacity-0 pointer-events-none': isSettingsOpen,
-        }
-      )}
+      // onClick={handleReplay}
+      className={cn('react-scan-replay-button', {
+        'opacity-0 pointer-events-none': isSettingsOpen,
+      })}
     >
       <Icon name="icon-replay" />
     </button>
@@ -121,7 +117,8 @@ const HeaderInspect = () => {
       if (!parentCompositeFiber) return;
 
       const displayName = getDisplayName(parentCompositeFiber.type);
-      const reportData = Store.reportData.get(parentCompositeFiber);
+      const reportData = Store.reportData.get(getFiberId(parentCompositeFiber));
+
       const count = reportData?.count || 0;
       const time = reportData?.time || 0;
 
@@ -196,7 +193,8 @@ export const Header = () => {
         <HeaderSettings />
         <HeaderInspect />
       </div>
-      {Store.inspectState.value.kind !== 'inspect-off' && <BtnReplay />}
+      {Store.inspectState.value.kind === 'focused' ? <Arrows /> : null}
+      {/* {Store.inspectState.value.kind !== 'inspect-off' && <BtnReplay />} */}
       <button
         type="button"
         title="Close"
