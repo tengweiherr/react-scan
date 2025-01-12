@@ -12,6 +12,7 @@ import { Store } from '~core/index';
 import { isEqual } from '~core/utils';
 import { CopyToClipboard } from '~web/components/copy-to-clipboard';
 import { Icon } from '~web/components/icon';
+import { signalIsSettingsOpen } from '~web/state';
 import { cn, tryOrElse } from '~web/utils/helpers';
 import { constant } from '~web/utils/preact/constant';
 import { flashManager } from './flash-overlay';
@@ -100,9 +101,6 @@ interface EditableValueProps {
 
 type IterableEntry = [key: string | number, value: unknown];
 
-const THROTTLE_MS = 16;
-const DEBOUNCE_MS = 150;
-
 const globalInspectorState = {
   lastRendered: new Map<string, unknown>(),
   expandedPaths: new Set<string>(),
@@ -110,7 +108,21 @@ const globalInspectorState = {
     globalInspectorState.lastRendered.clear();
     globalInspectorState.expandedPaths.clear();
     flashManager.cleanupAll();
-  }
+    resetStateTracking();
+    inspectorState.value = {
+      fiber: null,
+      changes: {
+        state: new Set(),
+        props: new Set(),
+        context: new Set(),
+      },
+      current: {
+        state: {},
+        props: {},
+        context: {},
+      },
+    };
+  },
 };
 
 const inspectorState = signal<InspectorState>({
@@ -695,7 +707,9 @@ const PropertyElement = ({
     parentPath ?? '',
     name,
   );
-  const [isExpanded, setIsExpanded] = useState(globalInspectorState.expandedPaths.has(currentPath));
+  const [isExpanded, setIsExpanded] = useState(
+    globalInspectorState.expandedPaths.has(currentPath),
+  );
   const [isEditing, setIsEditing] = useState(false);
 
   const prevValue = globalInspectorState.lastRendered.get(currentPath);
@@ -711,7 +725,7 @@ const PropertyElement = ({
       prevValue !== undefined &&
       !isFirstRender;
 
-    if (shouldFlash && refElement.current) {
+    if (shouldFlash && refElement.current && level === 0) {
       flashManager.create(refElement.current);
     }
 
@@ -720,7 +734,7 @@ const PropertyElement = ({
         flashManager.cleanup(refElement.current);
       }
     };
-  }, [value, isChanged, currentPath, prevValue]);
+  }, [value, isChanged, currentPath, prevValue, level]);
 
   const handleToggleExpand = useCallback(() => {
     setIsExpanded((prevState: boolean) => {
@@ -797,20 +811,27 @@ const PropertyElement = ({
     );
   }, [section, overrideProps, overrideHookState, allowEditing, name]);
 
-  const shouldShowWarning = useMemo(() => {
+  const isBadRender = useMemo(() => {
+    const isFirstRender = !globalInspectorState.lastRendered.has(currentPath);
+
+    if (isFirstRender) {
+      if (typeof value === 'function') {
+        return true;
+      }
+
+      if (typeof value !== 'object') {
+        return false;
+      }
+    }
+
     const shouldShowChange =
-      !globalInspectorState.lastRendered.has(currentPath) ||
+      !isFirstRender ||
       !isEqual(globalInspectorState.lastRendered.get(currentPath), value);
 
-    const isBadRender =
-      level === 0 &&
-      shouldShowChange &&
-      typeof value === 'object' &&
-      value !== null &&
-      !isPromise(value);
+    const isBadRender = level === 0 && shouldShowChange && !isPromise(value);
 
     return isBadRender;
-  }, [level, currentPath, value]);
+  }, [currentPath, level, value]);
 
   const clipboardText = useMemo(() => formatForClipboard(value), [value]);
 
@@ -909,42 +930,76 @@ const PropertyElement = ({
 
   return (
     <div ref={refElement} className="react-scan-property">
-      <div className="react-scan-property-content">
-        {isExpandable(value) && (
-          <button
-            type="button"
-            onClick={handleToggleExpand}
-            className="react-scan-arrow"
-          >
-            <Icon
-              name="icon-chevron-right"
-              size={12}
-              className={cn({
-                'rotate-90': isExpanded,
-              })}
-            />
-          </button>
-        )}
+      <div className={cn('react-scan-property-content')}>
+        {
+          isExpandable(value) && (
+            <button
+              type="button"
+              onClick={handleToggleExpand}
+              className="react-scan-arrow"
+            >
+              <Icon
+                name="icon-chevron-right"
+                size={12}
+                className={cn({
+                  'rotate-90': isExpanded,
+                })}
+              />
+            </button>
+          )
+        }
+
         <div
           className={cn('group', 'react-scan-preview-line', {
             'react-scan-highlight': isChanged,
           })}
         >
-          {shouldShowWarning && (
-            <Icon name="icon-alert" className="text-yellow-500" size={12} />
-          )}
+          {
+            isBadRender &&
+            !changedKeys.has(`${name}:memoized`) &&
+            !changedKeys.has(`${name}:unmemoized`) && (
+              <Icon
+                name="icon-bell-ring"
+                className="text-yellow-500"
+                size={14}
+              />
+            )
+          }
+          {
+            changedKeys.has(`${name}:memoized`)
+              ? (
+                <Icon
+                  name="icon-shield-check"
+                  className="text-green-600"
+                  size={14}
+                />
+              )
+              : (
+                changedKeys.has(`${name}:unmemoized`) && (
+                  <Icon
+                    name="icon-flame"
+                    className="text-red-500"
+                    size={14}
+                  />
+                )
+              )
+          }
           <div className="react-scan-key">{name}:</div>
-          {isEditing && isEditableValue(value, parentPath) ? (
-            <EditableValue
-              value={value}
-              onSave={handleSave}
-              onCancel={() => setIsEditing(false)}
-            />
-          ) : (
-            <button type="button" className="truncate" onClick={handleEdit}>
-              {valuePreview}
-            </button>
-          )}
+          {
+            isEditing && isEditableValue(value, parentPath)
+              ? (
+                <EditableValue
+                  value={value}
+                  onSave={handleSave}
+                  onCancel={() => setIsEditing(false)}
+                />
+              )
+              : (
+                <button type="button" className="truncate" onClick={handleEdit}>
+                  {valuePreview}
+                </button>
+              )
+          }
           <CopyToClipboard
             text={clipboardText}
             className="opacity-0 transition-opacity duration-150 group-hover:opacity-100"
@@ -952,11 +1007,22 @@ const PropertyElement = ({
             {({ ClipboardIcon }) => <>{ClipboardIcon}</>}
           </CopyToClipboard>
         </div>
-        {isExpandable(value) && isExpanded && (
-          <div className="react-scan-nested">
-            {renderNestedProperties(value)}
-          </div>
-        )}
+        <div
+          className={cn(
+            'react-scan-expandable',
+            {
+              'react-scan-expanded': isExpanded,
+            }
+          )}
+        >
+          {
+            isExpandable(value) && (
+              <div className="react-scan-nested">
+                {renderNestedProperties(value)}
+              </div>
+            )
+          }
+        </div>
       </div>
     </div>
   );
@@ -1018,47 +1084,90 @@ const PropertySection = ({ title, section }: PropertySectionProps) => {
 };
 
 const WhatChanged = constant(() => {
+  const refPrevFiber = useRef<Fiber | null>(null);
   const [isExpanded, setIsExpanded] = useState(Store.wasDetailsOpen.value);
   const [shouldShow, setShouldShow] = useState(false);
-  const { changes, fiber } = inspectorState.value;
-  const refTimer = useRef<TTimer>();
-  const refPrevFiber = useRef<Fiber | null>(null);
 
-  const hasChanges =
-    changes.state.size > 0 ||
-    changes.props.size > 0 ||
-    changes.context.size > 0;
+  const { changes, fiber } = inspectorState.value;
+
+  const renderSection = useCallback((
+    sectionName: 'state' | 'props' | 'context',
+    items: Set<string>,
+    getCount: (key: string) => number,
+  ) => {
+    const elements = Array.from(items).reduce<JSX.Element[]>((acc, key) => {
+      if (sectionName === 'props') {
+        const isUnmemoized = key.endsWith(':unmemoized');
+        if (isUnmemoized) {
+          acc.push(
+            <li key={key}>
+              <div>
+                {key.split(':')[0]}{' '}
+                <Icon name="icon-flame" className="text-white shadow-sm mr-2" size={14} />
+              </div>
+            </li>,
+          );
+        }
+      }
+
+      const count = getCount(key);
+      if (count > 0) {
+        const displayKey =
+          sectionName === 'context' ? key.replace(/^context\./, '') : key;
+        acc.push(
+          <li key={key}>
+            {displayKey} ×{count}
+          </li>,
+        );
+      }
+
+      return acc;
+    }, []);
+
+    if (!elements.length) return null;
+
+    return (
+      <>
+        <div>
+          {sectionName.charAt(0).toUpperCase() + sectionName.slice(1)}:
+        </div>
+        <ul>{elements}</ul>
+      </>
+    );
+  }, []);
+
+  const stateSection = useMemo(
+    () => renderSection('state', changes.state, getStateChangeCount),
+    [changes.state, renderSection],
+  );
+
+  const propsSection = useMemo(
+    () => renderSection('props', changes.props, getPropsChangeCount),
+    [changes.props, renderSection],
+  );
+
+  const contextSection = useMemo(
+    () => renderSection('context', changes.context, getContextChangeCount),
+    [changes.context, renderSection],
+  );
+
+  const { hasChanges, sections } = useMemo(() => {
+    return {
+      hasChanges: !!(stateSection || propsSection || contextSection),
+      sections: [stateSection, propsSection, contextSection],
+    };
+  }, [stateSection, propsSection, contextSection]);
 
   useEffect(() => {
-    const cleanup = () => {
-      clearTimeout(refTimer.current);
-      setShouldShow(false);
-    };
-
-    if (fiber && refPrevFiber.current && fiber.type !== refPrevFiber.current.type) {
-      cleanup();
+    if (!refPrevFiber.current || refPrevFiber.current.type !== fiber?.type) {
       refPrevFiber.current = fiber;
+      setShouldShow(false);
       return;
     }
 
     refPrevFiber.current = fiber;
-
-    if (!hasChanges) {
-      cleanup();
-      return;
-    }
-
-    clearTimeout(refTimer.current);
-    refTimer.current = setTimeout(() => {
-      setShouldShow(true);
-    }, 32);
-
-    return cleanup;
+    setShouldShow(hasChanges);
   }, [hasChanges, fiber]);
-
-  if (!hasChanges || !shouldShow) {
-    return null;
-  }
 
   const handleToggle = useCallback(() => {
     setIsExpanded((state) => {
@@ -1068,171 +1177,128 @@ const WhatChanged = constant(() => {
   }, []);
 
   return (
-    <button
-      type="button"
-      onClick={handleToggle}
-      onKeyDown={(e) => e.key === 'Enter' && handleToggle()}
-      className="flex w-full flex-col bg-yellow-600 px-1 py-2 text-left text-white"
+    <div
+      className={cn(
+        'react-scan-expandable',
+        {
+          'react-scan-expanded': shouldShow,
+        },
+      )}
     >
-      <div className="flex items-center">
-        <span className="flex w-8 items-center justify-center">
-          <Icon
-            name="icon-chevron-right"
-            size={12}
-            className={cn({
-              'rotate-90': isExpanded,
-            })}
-          />
-        </span>
-        What changed?
-      </div>
-      <div
-        className={cn('react-scan-expandable pl-8 flex-1', {
-          'react-scan-expanded': isExpanded,
-        })}
-      >
-        <div className="overflow-hidden">
-          {changes.state.size > 0 && (
-            <>
-              <div>State:</div>
-              <ul style="list-style-type:disc;padding-left:20px">
-                {Array.from(changes.state)
-                  .map((key) => {
-                    const count = getStateChangeCount(key);
-                    if (count > 0) {
-                      return (
-                        <li key={key}>
-                          {key} ×{count}
-                        </li>
-                      );
-                    }
-                    return null;
-                  })
-                  .filter(Boolean)}
-              </ul>
-            </>
-          )}
-          {changes.props.size > 0 && (
-            <>
-              <div>Props:</div>
-              <ul style="list-style-type:disc;padding-left:20px">
-                {Array.from(changes.props)
-                  .map((key) => {
-                    const count = getPropsChangeCount(key);
-                    if (count > 0) {
-                      return (
-                        <li key={key}>
-                          {key} ×{count}
-                        </li>
-                      );
-                    }
-                    return null;
-                  })
-                  .filter(Boolean)}
-              </ul>
-            </>
-          )}
-          {changes.context.size > 0 && (
-            <>
-              <div>Context:</div>
-              <ul style="list-style-type:disc;padding-left:20px">
-                {Array.from(changes.context)
-                  .map((key) => {
-                    const count = getContextChangeCount(key);
-                    if (count > 0) {
-                      return (
-                        <li key={key}>
-                          {key.replace(/^context\./, '')} ×{count}
-                        </li>
-                      );
-                    }
-                    return null;
-                  })
-                  .filter(Boolean)}
-              </ul>
-            </>
-          )}
-        </div>
-      </div>
-    </button>
+      {
+        shouldShow && refPrevFiber.current?.type === fiber?.type && (
+          <div
+            onClick={handleToggle}
+            onKeyDown={(e) => e.key === 'Enter' && handleToggle()}
+            className={cn(
+              'flex flex-col',
+              'px-1 py-2',
+              'text-left text-white',
+              'bg-yellow-600',
+              'overflow-hidden',
+              'opacity-0',
+              'transition-all duration-300 delay-300',
+              {
+                'opacity-100 delay-0': shouldShow,
+              },
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <span className="flex w-8 items-center justify-center">
+                  <Icon
+                    name="icon-chevron-right"
+                    size={12}
+                    className={cn({
+                      'rotate-90': isExpanded,
+                    })}
+                  />
+                </span>
+                What changed?
+              </div>
+            </div>
+            <div
+              className={cn(
+                'react-scan-what-changed',
+                'react-scan-expandable pl-8 flex-1',
+                {
+                  'react-scan-expanded pt-2': isExpanded,
+                },
+              )}
+            >
+              <div className="overflow-hidden">{sections}</div>
+            </div>
+          </div>
+        )
+      }
+    </div>
   );
 });
 
 export const Inspector = constant(() => {
   const refLastInspectedFiber = useRef<Fiber | null>(null);
 
+  const isSettingsOpen = signalIsSettingsOpen.value;
+
   useEffect(() => {
-    let rafId: ReturnType<typeof requestAnimationFrame>;
-    let debounceTimer: ReturnType<typeof setTimeout>;
-    let lastUpdateTime = 0;
     let isProcessing = false;
-    let pendingFiber: Fiber | null = null;
-    let lastInspectedElement: Element | null = null;
+    const pendingUpdates = new Set<Fiber>();
 
-    const updateInspectorState = (fiber: Fiber, element: Element) => {
-      const isNewComponent = !refLastInspectedFiber.current ||
-        refLastInspectedFiber.current.type !== fiber.type;
-      const isNewElement = element !== lastInspectedElement;
-
-      if (isNewComponent || isNewElement) {
-        resetStateTracking();
-        lastInspectedElement = element;
-        globalInspectorState.cleanup();
-      }
+    const updateInspectorState = (fiber: Fiber) => {
+      refLastInspectedFiber.current = fiber;
 
       inspectorState.value = {
         fiber,
         changes: {
-          props: isNewElement ? new Set() : getChangedProps(fiber),
-          state: isNewElement ? new Set() : getChangedState(fiber),
-          context: isNewElement ? new Set() : getChangedContext(fiber),
+          props: getChangedProps(fiber),
+          state: getChangedState(fiber),
+          context: getChangedContext(fiber),
         },
         current: {
           state: getCurrentState(fiber),
           props: getCurrentProps(fiber),
           context: getCurrentContext(fiber),
-        },
+        }
       };
-
-      refLastInspectedFiber.current = fiber;
     };
 
-    const processFiberUpdate = (fiber: Fiber, element: Element) => {
-      const now = Date.now();
-      const timeSinceLastUpdate = now - lastUpdateTime;
-
-      clearTimeout(debounceTimer);
-      cancelAnimationFrame(rafId);
-
-      if (timeSinceLastUpdate < THROTTLE_MS) {
-        pendingFiber = fiber;
-        debounceTimer = setTimeout(() => {
-          rafId = requestAnimationFrame(() => {
-            if (pendingFiber) {
-              isProcessing = true;
-              updateInspectorState(pendingFiber, element);
-              isProcessing = false;
-              pendingFiber = null;
-              lastUpdateTime = Date.now();
-            }
-          });
-        }, DEBOUNCE_MS);
+    const processNextUpdate = () => {
+      if (pendingUpdates.size === 0) {
+        isProcessing = false;
         return;
       }
 
-      rafId = requestAnimationFrame(() => {
+      const nextFiber = Array.from(pendingUpdates)[0];
+      pendingUpdates.delete(nextFiber);
+
+      try {
+        updateInspectorState(nextFiber);
+      } finally {
+        if (pendingUpdates.size > 0) {
+          queueMicrotask(processNextUpdate);
+        } else {
+          isProcessing = false;
+        }
+      }
+    };
+
+    const processFiberUpdate = (fiber: Fiber) => {
+      pendingUpdates.add(fiber);
+
+      if (!isProcessing) {
         isProcessing = true;
-        updateInspectorState(fiber, element);
-        isProcessing = false;
-        lastUpdateTime = now;
-      });
+        queueMicrotask(processNextUpdate);
+      }
     };
 
     const unSubState = Store.inspectState.subscribe((state) => {
       if (state.kind !== 'focused' || !state.focusedDomElement) {
-        clearTimeout(debounceTimer);
-        cancelAnimationFrame(rafId);
+        pendingUpdates.clear();
         return;
+      }
+
+      if (state.kind === 'focused') {
+        signalIsSettingsOpen.value = false;
       }
 
       const { parentCompositeFiber } = getCompositeFiberFromElement(
@@ -1240,16 +1306,34 @@ export const Inspector = constant(() => {
       );
       if (!parentCompositeFiber) return;
 
-      processFiberUpdate(parentCompositeFiber, state.focusedDomElement);
+      pendingUpdates.clear();
+      globalInspectorState.cleanup();
+      refLastInspectedFiber.current = parentCompositeFiber;
+
+      getChangedProps(parentCompositeFiber);
+      getChangedState(parentCompositeFiber);
+      getChangedContext(parentCompositeFiber);
+
+      inspectorState.value = {
+        fiber: parentCompositeFiber,
+        changes: {
+          props: new Set(),
+          state: new Set(),
+          context: new Set(),
+        },
+        current: {
+          state: getCurrentState(parentCompositeFiber),
+          props: getCurrentProps(parentCompositeFiber),
+          context: getCurrentContext(parentCompositeFiber),
+        }
+      };
+
     });
 
     const unSubReport = Store.lastReportTime.subscribe(() => {
-      if (isProcessing) return;
-
       const inspectState = Store.inspectState.value;
       if (inspectState.kind !== 'focused') {
-        clearTimeout(debounceTimer);
-        cancelAnimationFrame(rafId);
+        pendingUpdates.clear();
         return;
       }
 
@@ -1263,25 +1347,33 @@ export const Inspector = constant(() => {
         return;
       }
 
-      if (parentCompositeFiber && refLastInspectedFiber.current) {
-        processFiberUpdate(parentCompositeFiber, element);
+      if (parentCompositeFiber.type === refLastInspectedFiber.current?.type) {
+        processFiberUpdate(parentCompositeFiber);
       }
     });
 
     return () => {
       unSubState();
       unSubReport();
-      clearTimeout(debounceTimer);
-      cancelAnimationFrame(rafId);
-      pendingFiber = null;
-      lastInspectedElement = null;
+      pendingUpdates.clear();
       globalInspectorState.cleanup();
+      resetStateTracking();
     };
   }, []);
 
   return (
     <InspectorErrorBoundary>
-      <div className="react-scan-inspector">
+      <div
+        className={cn(
+          'react-scan-inspector',
+          'opacity-0',
+          'transition-opacity duration-150 delay-0',
+          'pointer-events-none',
+          {
+            'opacity-100 delay-300 pointer-events-auto': !isSettingsOpen,
+          },
+        )}
+      >
         <WhatChanged />
         <PropertySection title="Props" section="props" />
         <PropertySection title="State" section="state" />
@@ -1290,6 +1382,7 @@ export const Inspector = constant(() => {
     </InspectorErrorBoundary>
   );
 });
+
 export const replayComponent = async (fiber: Fiber): Promise<void> => {
   try {
     const { overrideProps, overrideHookState } = getOverrideMethods();

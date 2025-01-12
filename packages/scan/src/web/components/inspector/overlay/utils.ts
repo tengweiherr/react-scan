@@ -148,12 +148,8 @@ export const isDirectComponent = (fiber: Fiber): boolean => {
 export const getCurrentState = (fiber: Fiber | null) => {
   if (!fiber) return {};
 
-  try {
-    if (fiber.tag === FunctionComponentTag && isDirectComponent(fiber)) {
-      return getCurrentFiberState(fiber) ?? {};
-    }
-  } catch {
-    // Silently fail
+  if (fiber.tag === FunctionComponentTag && isDirectComponent(fiber)) {
+    return getCurrentFiberState(fiber) ?? {};
   }
   return {};
 };
@@ -273,42 +269,50 @@ export const getCurrentProps = (fiber: Fiber): Record<string, unknown> => {
       fiber.alternate?.pendingProps ||
       fiber.memoizedProps;
 
-  return { ...baseProps };
-};
+  const result: Record<string, unknown> = {};
 
-export const getChangedProps = (fiber: Fiber): Set<string> => {
-  const changes = new Set<string>();
-  if (!fiber.alternate) return changes;
-
-  const previousProps = fiber.alternate.memoizedProps ?? {};
-  const currentProps = fiber.memoizedProps ?? {};
-
-  const propsOrder = getPropsOrder(fiber);
-  const orderedProps = [...propsOrder, ...Object.keys(currentProps)];
-  const uniqueOrderedProps = [...new Set(orderedProps)];
-
-  for (const key of uniqueOrderedProps) {
-    if (key === 'children') continue;
-    if (!(key in currentProps)) continue;
-
-    const currentValue = currentProps[key];
-    const previousValue = previousProps[key];
-
-    if (!isEqual(currentValue, previousValue)) {
-      changes.add(key);
-
-      if (typeof currentValue !== 'function') {
-        const count = (propsChangeCounts.get(key) ?? 0) + 1;
-        propsChangeCounts.set(key, count);
+  for (const [key, value] of Object.entries(baseProps)) {
+    result[key] = value;
+    if ((value && typeof value === 'object') || typeof value === 'function') {
+      if (fiber.alternate?.memoizedProps) {
+        const prevValue = fiber.alternate.memoizedProps[key];
+        const status = value === prevValue ? 'memoized' : 'unmemoized';
+        propsChangeCounts.set(`${key}:${status}`, 0);
       }
     }
   }
 
-  for (const key in previousProps) {
-    if (key === 'children') continue;
-    if (!(key in currentProps)) {
+  return result;
+};
+
+export const getChangedProps = (fiber: Fiber | null): Set<string> => {
+  if (!fiber?.memoizedProps) return new Set();
+
+  const currentProps = fiber.memoizedProps;
+  const changes = new Set<string>();
+
+  for (const [key, currentValue] of Object.entries(currentProps)) {
+    // Track memoization for non-primitive values (functions, objects, arrays)
+    if (
+      (currentValue && typeof currentValue === 'object') ||
+      typeof currentValue === 'function'
+    ) {
+      if (fiber.alternate?.memoizedProps) {
+        const prevValue = fiber.alternate.memoizedProps[key];
+        const status = currentValue === prevValue ? 'memoized' : 'unmemoized';
+        changes.add(`${key}:${status}`);
+      }
+      continue;
+    }
+
+    // Track changes for primitive values
+    if (
+      fiber.alternate?.memoizedProps &&
+      key in fiber.alternate.memoizedProps &&
+      !isEqual(fiber.alternate.memoizedProps[key], currentValue)
+    ) {
       changes.add(key);
-      const count = (propsChangeCounts.get(key) ?? 0) + 1;
+      const count = (propsChangeCounts.get(key) || 0) + 1;
       propsChangeCounts.set(key, count);
     }
   }

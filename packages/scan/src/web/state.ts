@@ -7,6 +7,7 @@ import type {
 import { LOCALSTORAGE_KEY, MIN_SIZE, SAFE_AREA } from './constants';
 import { readLocalStorage, saveLocalStorage } from './utils/helpers';
 
+export const signalIsSettingsOpen = signal(false);
 export const signalRefWidget = signal<HTMLDivElement | null>(null);
 
 export const defaultWidgetConfig = {

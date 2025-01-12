@@ -10,6 +10,7 @@ import {
 import { LOCALSTORAGE_KEY, MIN_SIZE, SAFE_AREA } from '../../constants';
 import {
   defaultWidgetConfig,
+  signalIsSettingsOpen,
   signalRefWidget,
   signalWidget,
   updateDimensions,
@@ -22,14 +23,12 @@ import {
   getBestCorner,
 } from './helpers';
 import { ResizeHandle } from './resize-handle';
+import { Settings } from './settings';
 import { Toolbar } from './toolbar';
 
 export const Widget = () => {
-  const refShouldExpand = useRef<boolean>(false);
-
   const refWidget = useRef<HTMLDivElement | null>(null);
   const refContent = useRef<HTMLDivElement>(null);
-  const refFooter = useRef<HTMLDivElement>(null);
 
   const refInitialMinimizedWidth = useRef<number>(0);
   const refInitialMinimizedHeight = useRef<number>(0);
@@ -44,7 +43,7 @@ export const Widget = () => {
     let newWidth: number;
     let newHeight: number;
 
-    if (isInspectFocused) {
+    if (isInspectFocused || signalIsSettingsOpen.value) {
       const lastDims = signalWidget.value.lastDimensions;
       newWidth = calculateBoundedSize(lastDims.width, 0, true);
       newHeight = calculateBoundedSize(lastDims.height, 0, false);
@@ -77,7 +76,6 @@ export const Widget = () => {
 
     let rafId: number | null = null;
     const onTransitionEnd = () => {
-      containerStyle.transition = 'none';
       updateDimensions();
       container.removeEventListener('transitionend', onTransitionEnd);
       if (rafId) {
@@ -123,6 +121,7 @@ export const Widget = () => {
     }
 
     updateDimensions();
+
   }, []);
 
   const handleDrag = useCallback(
@@ -252,10 +251,10 @@ export const Widget = () => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
-    if (!refWidget.current || !refFooter.current) return;
+    if (!refWidget.current) return;
 
     refWidget.current.style.width = 'min-content';
-    refInitialMinimizedHeight.current = refFooter.current.offsetHeight;
+    refInitialMinimizedHeight.current = 36; // height of the header
     refInitialMinimizedWidth.current = refWidget.current.offsetWidth;
 
     refWidget.current.style.maxWidth = `calc(100vw - ${SAFE_AREA * 2}px)`;
@@ -290,22 +289,22 @@ export const Widget = () => {
       });
     });
 
-    const unsubscribeStoreInspectState = Store.inspectState.subscribe(
-      (state) => {
-        if (!refContent.current) return;
+    signalIsSettingsOpen.subscribe(() => {
+      updateWidgetPosition();
+    });
 
-        refShouldExpand.current = state.kind === 'focused';
+    const unsubscribeStoreInspectState = Store.inspectState.subscribe((state) => {
+      if (!refContent.current) return;
 
-        if (state.kind === 'inspecting') {
-          toggleMultipleClasses(refContent.current, [
-            'opacity-0',
-            'duration-0',
-            'delay-0',
-          ]);
-        }
-        updateWidgetPosition();
-      },
-    );
+      if (state.kind === 'inspecting') {
+        toggleMultipleClasses(refContent.current, [
+          'opacity-0',
+          'duration-0',
+          'delay-0',
+        ]);
+      }
+      updateWidgetPosition();
+    });
 
     const handleWindowResize = () => {
       updateWidgetPosition(true);
@@ -378,31 +377,20 @@ export const Widget = () => {
             <Header />
             <div
               className={cn(
-                'react-scan-prop',
+                'relative',
                 'flex-1',
                 'text-white',
+                'bg-[#0A0A0A]',
                 'transition-opacity duration-150 delay-150',
                 'overflow-y-scroll overflow-x-hidden',
               )}
             >
               <Inspector />
+              <Settings />
             </div>
           </div>
 
-          <div
-            ref={refFooter}
-            className={cn(
-              'relative',
-              'h-9',
-              'flex items-center justify-between',
-              'transition-colors duration-200',
-              'overflow-hidden',
-              'rounded-lg',
-              'z-10',
-            )}
-          >
-            <Toolbar />
-          </div>
+          <Toolbar />
         </div>
       </div>
     </>

@@ -5,6 +5,7 @@ import {
   type InspectableElement,
   getInspectableElements,
 } from '~web/components/inspector/utils';
+import { useDelayedValue } from '~web/hooks/use-mount-delay';
 import { cn } from '~web/utils/helpers';
 import { constant } from '~web/utils/preact/constant';
 
@@ -14,6 +15,7 @@ export const Arrows = constant(() => {
   const refAllElements = useRef<Array<InspectableElement>>([]);
 
   const [shouldRender, setShouldRender] = useState(false);
+  const isMounted = useDelayedValue(shouldRender, 0, 1000);
 
   const findNextElement = useCallback(
     (currentElement: HTMLElement, direction: 'next' | 'previous') => {
@@ -64,39 +66,59 @@ export const Arrows = constant(() => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: no deps
   useEffect(() => {
     const unsubscribe = Store.inspectState.subscribe((state) => {
-      if (state.kind === 'focused') {
+
+      if (state.kind === 'focused' && refButtonPrevious.current && refButtonNext.current) {
         refAllElements.current = getInspectableElements();
+
+        const hasPrevious = !!findNextElement(
+          state.focusedDomElement,
+          'previous',
+        );
+        refButtonPrevious.current.classList.toggle(
+          'opacity-50',
+          !hasPrevious,
+        );
+        refButtonPrevious.current.classList.toggle(
+          'cursor-not-allowed',
+          !hasPrevious,
+        );
+
+        const hasNext = !!findNextElement(state.focusedDomElement, 'next');
+        refButtonNext.current.classList.toggle(
+          'opacity-50',
+          !hasNext,
+        );
+        refButtonNext.current.classList.toggle(
+          'cursor-not-allowed',
+          !hasNext,
+        );
+
         setShouldRender(true);
-        if (refButtonPrevious.current) {
-          const hasPrevious = !!findNextElement(
-            state.focusedDomElement,
-            'previous',
-          );
-          refButtonPrevious.current.classList.toggle(
-            'opacity-50',
-            !hasPrevious,
-          );
-          refButtonPrevious.current.classList.toggle(
-            'cursor-not-allowed',
-            !hasPrevious,
-          );
-        }
-        if (refButtonNext.current) {
-          const hasNext = !!findNextElement(state.focusedDomElement, 'next');
-          refButtonNext.current.classList.toggle('opacity-50', !hasNext);
-          refButtonNext.current.classList.toggle(
-            'cursor-not-allowed',
-            !hasNext,
-          );
-        }
       }
 
-      if (state.kind === 'inspecting') {
+      if (state.kind === 'inspecting' && refButtonPrevious.current && refButtonNext.current) {
+        refButtonPrevious.current.classList.toggle(
+          'opacity-50',
+          true,
+        );
+        refButtonPrevious.current.classList.toggle(
+          'cursor-not-allowed',
+          true,
+        );
+        refButtonNext.current.classList.toggle(
+          'opacity-50',
+          true,
+        );
+        refButtonNext.current.classList.toggle(
+          'cursor-not-allowed',
+          true,
+        );
         setShouldRender(true);
       }
 
       if (state.kind === 'inspect-off') {
         refAllElements.current = [];
+        setShouldRender(false);
       }
 
       if (state.kind === 'uninitialized') {
@@ -111,15 +133,17 @@ export const Arrows = constant(() => {
     };
   }, []);
 
-  if (!shouldRender) return null;
-
   return (
     <div
       className={cn(
         'flex items-stretch justify-between',
         'ml-auto',
-        'border-l-1 border-white/10 text-[#999]',
+        'text-[#999]',
         'overflow-hidden',
+        'transition-opacity duration-300',
+        {
+          'opacity-0 w-0': !isMounted,
+        }
       )}
     >
       <button
@@ -127,7 +151,14 @@ export const Arrows = constant(() => {
         ref={refButtonPrevious}
         title="Previous element"
         onClick={onPreviousFocus}
-        className="flex cursor-not-allowed items-center justify-center px-3 opacity-50"
+        className={cn(
+          'button',
+          'flex items-center justify-center',
+          'px-3',
+          'opacity-50',
+          'transition-all duration-300',
+          'cursor-not-allowed',
+        )}
       >
         <Icon name="icon-previous" />
       </button>
@@ -136,7 +167,13 @@ export const Arrows = constant(() => {
         ref={refButtonNext}
         title="Next element"
         onClick={onNextFocus}
-        className="flex cursor-not-allowed items-center justify-center px-3 opacity-50"
+        className={cn(
+          'button',
+          'flex items-center justify-center',
+          'px-3 opacity-50',
+          'transition-all duration-300',
+          'cursor-not-allowed',
+        )}
       >
         <Icon name="icon-next" />
       </button>

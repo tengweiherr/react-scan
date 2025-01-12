@@ -1,6 +1,6 @@
 export const SAFE_AREA = 24;
 export const MIN_SIZE = {
-  width: 360,
+  width: 320,
   height: 36,
 } as const;
 

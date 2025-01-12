@@ -790,7 +790,7 @@ export const ignoredProps = new WeakSet<
 >();
 
 export const ignoreScan = (node: ReactNode) => {
-  if (typeof node === 'object' && node !== null) {
+  if (node && typeof node === 'object') {
     ignoredProps.add(node);
   }
 };

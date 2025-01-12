@@ -5,6 +5,7 @@
     "source.organizeImports.biome": "always",
     "quickfix.biome": "always"
   },
+  "css.lint.unknownAtRules": "ignore",
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
@@ -20,5 +21,8 @@
   "[html]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "[css]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
 }

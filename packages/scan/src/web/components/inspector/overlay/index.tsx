@@ -7,6 +7,7 @@ import {
   getCompositeComponentFromElement,
   nonVisualTags,
 } from '~web/components/inspector/utils';
+import { signalIsSettingsOpen } from '~web/state';
 import { cn, throttle } from '~web/utils/helpers';
 import { lerp } from '~web/utils/lerp';
 
@@ -326,8 +327,9 @@ export const ScanOverlay = () => {
         !refCanvas.current ||
         e.propertyName !== 'opacity' ||
         !refIsFadingOut.current
-      )
+      ) {
         return;
+      }
       refCanvas.current.removeEventListener(
         'transitionend',
         handleTransitionEnd,
@@ -335,7 +337,6 @@ export const ScanOverlay = () => {
       cleanupCanvas(refCanvas.current);
       onComplete?.();
     };
-
     const existingListener = refCleanupMap.current.get('fade-out');
     if (existingListener) {
       existingListener();
@@ -352,21 +353,31 @@ export const ScanOverlay = () => {
 
     refIsFadingOut.current = true;
     refCanvas.current.classList.remove('fade-in');
-    refCanvas.current.classList.add('fade-out');
+    requestAnimationFrame(() => {
+      refCanvas.current?.classList.add('fade-out');
+    });
   };
 
   const startFadeIn = () => {
     if (!refCanvas.current) return;
-    refCanvas.current.classList.remove('fade-out');
-    refCanvas.current.classList.add('fade-in');
     refIsFadingOut.current = false;
+    refCanvas.current.classList.remove('fade-out');
+    requestAnimationFrame(() => {
+      refCanvas.current?.classList.add('fade-in');
+    });
   };
 
   const handleHoverableElement = (componentElement: HTMLElement) => {
     if (componentElement === refLastHoveredElement.current) return;
 
-    startFadeIn();
     refLastHoveredElement.current = componentElement;
+
+    if (nonVisualTags.has(componentElement.tagName)) {
+      startFadeOut();
+    } else {
+      startFadeIn();
+    }
+
     Store.inspectState.value = {
       kind: 'inspecting',
       hoveredDomElement: componentElement,
@@ -509,6 +520,7 @@ export const ScanOverlay = () => {
       }
       case 'inspecting': {
         startFadeOut(() => {
+          signalIsSettingsOpen.value = false;
           Store.inspectState.value = {
             kind: 'inspect-off',
           };
@@ -539,6 +551,7 @@ export const ScanOverlay = () => {
 
     switch (state.kind) {
       case 'inspect-off':
+        startFadeOut();
         return;
 
       case 'inspecting':
