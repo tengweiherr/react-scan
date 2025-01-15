@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, lazy, useRef } from 'react';
+import { useRef } from 'react';
 import { useFormStatus } from 'react-dom';
 import { saveData } from './action';
 
@@ -9,8 +9,6 @@ function Submit() {
     <button disabled={pending}>{pending ? 'Submitting' : 'Submit'}</button>
   );
 }
-
-const ToggleScan = lazy(() => import('@/app/ToggleScan'));
 
 export default function UploadForm() {
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -22,25 +20,20 @@ export default function UploadForm() {
   }
 
   return (
-    <>
-      <form action={formAction} ref={formRef}>
-        <h1>Upload Demo</h1>
+    <form action={formAction} ref={formRef}>
+      <h1>Upload Demo</h1>
 
-        <div>Email</div>
-        <input type="email" name="email" required />
-        <br />
-        <br />
+      <div>Email</div>
+      <input type="email" name="email" required />
+      <br />
+      <br />
 
-        <div>Select file</div>
-        <input type="file" name="file" required />
-        <br />
-        <br />
-        <br />
-        <Submit />
-      </form>
-      <Suspense>
-        <ToggleScan />
-      </Suspense>
-    </>
+      <div>Select file</div>
+      <input type="file" name="file" required />
+      <br />
+      <br />
+      <br />
+      <Submit />
+    </form>
   );
 }
