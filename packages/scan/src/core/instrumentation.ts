@@ -424,7 +424,6 @@ export const createInstrumentation = (
   const instrumentation: Instrumentation = {
     // this will typically be false, but in cases where a user provides showToolbar: true, this will be true
     isPaused: signal(!ReactScanInternals.options.value.enabled),
-    // make this a weak set mf
     fiberRoots: new WeakSet<FiberRoot>(),
   };
   instrumentationInstances.set(instanceKey, {
