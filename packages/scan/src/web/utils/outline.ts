@@ -1,3 +1,5 @@
+// THIS FILE WILL BE DELETED
+
 import type { Fiber } from 'bippy';
 import { type OutlineKey, ReactScanInternals } from '~core/index';
 import type { AggregatedChange } from '~core/instrumentation';
@@ -119,17 +121,18 @@ export const flushOutlines = async () => {
 let animationFrameId: number | null = null;
 
 const shouldSkipInterpolation = (rect: DOMRect) => {
-  // animations tend to transform out of screen/ to a very tiny size, those are noisy so we don't lerp them
-  if (
-    rect.top >= window.innerHeight || // completely below viewport
-    rect.bottom <= 0 || // completely above viewport
-    rect.left >= window.innerWidth || // completely right of viewport
-    rect.right <= 0 // completely left of viewport
-  ) {
-    return true;
-  }
+  return false;
+  // // animations tend to transform out of screen/ to a very tiny size, those are noisy so we don't lerp them
+  // if (
+  //   rect.top >= window.innerHeight || // completely below viewport
+  //   rect.bottom <= 0 || // completely above viewport
+  //   rect.left >= window.innerWidth || // completely right of viewport
+  //   rect.right <= 0 // completely left of viewport
+  // ) {
+  //   return true;
+  // }
 
-  return !ReactScanInternals.options.value.smoothlyAnimateOutlines;
+  // return !ReactScanInternals.options.value.smoothlyAnimateOutlines;
 };
 
 const INTERPOLATION_SPEED = 0.2;

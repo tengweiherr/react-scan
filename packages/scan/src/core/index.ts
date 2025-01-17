@@ -136,12 +136,6 @@ export interface Options {
    * @default true
    */
   enabled?: boolean;
-  /**
-   * Include children of a component applied with withScan
-   *
-   * @default true
-   */
-  includeChildren?: boolean;
 
   /**
    * Force React Scan to run in production (not recommended)
@@ -149,14 +143,6 @@ export interface Options {
    * @default false
    */
   dangerouslyForceRunInProduction?: boolean;
-
-  /**
-   * Enable/disable geiger sound
-   *
-   * @default true
-   */
-  playSound?: boolean;
-
   /**
    * Log renders to the console
    *
@@ -176,55 +162,11 @@ export interface Options {
   showToolbar?: boolean;
 
   /**
-   * Render count threshold, only show
-   * when a component renders more than this
-   *
-   * @default 0
-   */
-  renderCountThreshold?: number;
-
-  /**
-   * Clear aggregated fibers after this time in milliseconds
-   *
-   * @default 5000
-   */
-  resetCountTimeout?: number;
-
-  /**
-   * Maximum number of renders for red indicator
-   *
-   * @default 20
-   * @deprecated
-   */
-  maxRenders?: number;
-
-  /**
-   * Report data to getReport()
-   *
-   * @default false
-   */
-  report?: boolean;
-
-  /**
-   * Always show labels
-   *
-   * @default false
-   */
-  alwaysShowLabels?: boolean;
-
-  /**
    * Animation speed
    *
    * @default "fast"
    */
   animationSpeed?: 'slow' | 'fast' | 'off';
-
-  /**
-   * Smoothly animate the re-render outline when the element moves
-   *
-   * @default true
-   */
-  smoothlyAnimateOutlines?: boolean;
 
   /**
    * Track unnecessary renders, and mark their outlines gray when detected
@@ -246,7 +188,6 @@ export interface Options {
 
 export type MonitoringOptions = Pick<
   Options,
-  | 'includeChildren'
   | 'enabled'
   | 'onCommitStart'
   | 'onCommitFinish'
@@ -398,8 +339,8 @@ const validateOptions = (options: Partial<Options>): Partial<Options> => {
     const value = options[key];
     switch (key) {
       case 'enabled':
-      case 'includeChildren':
-      // case 'log':
+      // case 'includeChildren':
+      case 'log':
       case 'showToolbar':
       // case 'report':
       // case 'alwaysShowLabels':
@@ -464,11 +405,11 @@ const validateOptions = (options: Partial<Options>): Partial<Options> => {
       //     typeof value === 'boolean' ? value : false;
       //   break;
       // }
-      case 'smoothlyAnimateOutlines': {
-        validOptions.smoothlyAnimateOutlines =
-          typeof value === 'boolean' ? value : false;
-        break;
-      }
+      // case 'smoothlyAnimateOutlines': {
+      //   validOptions.smoothlyAnimateOutlines =
+      //     typeof value === 'boolean' ? value : false;
+      //   break;
+      // }
       default:
         errors.push(`- Unknown option "${key}"`);
     }
@@ -614,35 +555,6 @@ const idempotent_createToolbar = (showToolbar: boolean) => {
   // then we are creating a toolbar for the first time
   const { shadowRoot } = initRootContainer();
   createToolbar(shadowRoot);
-};
-/**
- * @deprecated
- */
-export const withScan = <T extends object>(
-  component: ComponentType<T>,
-  options: Options = {},
-) => {
-  return component;
-  // const isInIframe = Store.isInIframe.value;
-  // let componentAllowList = ReactScanInternals.componentAllowList;
-
-  // if (
-  //   isInIframe ||
-  //   (options.enabled === false && options.showToolbar !== true)
-  // ) {
-  //   return component;
-  // }
-
-  // if (!componentAllowList) {
-  //   componentAllowList = new WeakMap<ComponentType<unknown>, Options>();
-  //   ReactScanInternals.componentAllowList = componentAllowList;
-  // }
-
-  // componentAllowList.set(component as ComponentType<unknown>, { ...options });
-
-  // start();
-
-  // return component;
 };
 
 export const scan = (options: Options = {}) => {

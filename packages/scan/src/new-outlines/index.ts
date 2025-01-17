@@ -551,6 +551,11 @@ export const initReactScanInstrumentation = () => {
       if (!isOverlayPaused) {
         outlineFiber(fiber);
       }
+      
+      if (ReactScanInternals.options.value.log) {
+        // this can be expensive given enough re-renders
+        log(renders);
+      }
       // optimization, only valid if toolbar is only listener
       if (!isInspectorInactive) {
         reportRenderToListeners(fiber);
