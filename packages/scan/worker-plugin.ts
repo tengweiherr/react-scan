@@ -1,9 +1,13 @@
 import * as esbuild from 'esbuild';
 
+/**
+ * A hacky plugin to build the worker file (resolving all imports), and inline
+ * the javascript into a variable by replacing __WORKER_CODE__ string in bundle with the worker
+ * build output
+ */
 export const workerPlugin = {
   name: 'worker-plugin',
   setup(build) {
-    // Build the worker code first
     const workerResult = esbuild.buildSync({
       entryPoints: ['src/new-outlines/offscreen-canvas.worker.ts'],
       bundle: true,
@@ -14,7 +18,6 @@ export const workerPlugin = {
     });
     const workerCode = workerResult.outputFiles[0].text;
 
-    // Replace the exact string we see in the output
     build.onEnd((result) => {
       if (!result.outputFiles) return;
 

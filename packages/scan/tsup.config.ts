@@ -96,8 +96,6 @@ export default defineConfig([
     treeshake: true,
     dts: true,
     minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
-    // minify: false,
-
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
@@ -170,7 +168,6 @@ export default defineConfig([
       'preact',
       '@preact/signals',
     ],
-    // plugins: [workerPlugin],
     loader: {
       '.css': 'text',
     },
@@ -180,10 +177,6 @@ export default defineConfig([
         tsconfig: path.resolve(__dirname, './tsconfig.json'),
       }),
     ],
-    // esbuildOptions(options) {
-    //   options.plugins = [...(options.plugins || []), workerPlugin];
-    //   return options;
-    // },
   },
   {
     entry: ['./src/cli.mts'],

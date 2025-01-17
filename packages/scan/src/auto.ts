@@ -1,12 +1,10 @@
 import { scan } from './index';
-import { init } from './install-hook'; // Initialize RDT hook
+import { init } from './install-hook';
 
 init();
 
 if (typeof window !== 'undefined') {
-  scan({
-    dangerouslyForceRunInProduction: true,
-  });
+  scan();
   window.reactScan = scan;
 }
 
