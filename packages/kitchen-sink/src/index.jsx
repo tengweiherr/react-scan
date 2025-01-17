@@ -4,13 +4,13 @@ import { scan } from 'react-scan'; // force production build
 
 import './styles.css';
 
-// scan({
-//   enabled: true,
-//   dangerouslyForceRunInProduction: true,
-//   // monitor: {
-//   //   url: 'https://localhost:3000/api/scan',
-//   // },
-// });
+scan({
+  enabled: true,
+  dangerouslyForceRunInProduction: true,
+  // monitor: {
+  //   url: 'https://localhost:3000/api/scan',
+  // },
+});
 
 const TooltipContext = createContext({ tooltip: '' });
 
