@@ -1,26 +1,20 @@
-import { Signal, signal } from '@preact/signals';
 import {
   type Fiber,
-  FiberRoot,
-  createFiberVisitor,
   didFiberCommit,
   getDisplayName,
   getFiberId,
   getNearestHostFibers,
   getTimings,
   getType,
-  instrument,
   isCompositeFiber,
-  secure,
-  traverseFiber,
 } from 'bippy';
 import {
   Change,
   ContextChange,
-  ignoredProps,
   PropsChange,
   ReactScanInternals,
   Store,
+  ignoredProps,
 } from '~core/index';
 import {
   ChangeReason,
@@ -39,7 +33,7 @@ import {
   updateScroll,
 } from './canvas';
 import type { ActiveOutline, BlueprintOutline, OutlineData } from './types';
-import { Instrumentation } from 'next/dist/build/swc/types';
+// import { Instrumentation } from 'next/dist/build/swc/types';
 
 // The worker code will be replaced at build time
 const workerCode = '__WORKER_CODE__';
@@ -104,6 +98,8 @@ const mergeRects = (rects: DOMRect[]) => {
   return new DOMRect(minX, minY, maxX - minX, maxY - minY);
 };
 
+// FIXME(Alexis): generators are the big bad, unfortunately.
+// We'll need alternatives, but for now this is fine.
 export const getBatchedRectMap = async function* (
   elements: Element[],
 ): AsyncGenerator<IntersectionObserverEntry[], void, unknown> {
@@ -484,13 +480,13 @@ const reportRenderToListeners = (fiber: Fiber) => {
           }),
         );
 
-        listeners.forEach((listener) => {
+        for (const listener of listeners) {
           listener({
             propsChanges,
             stateChanges,
             contextChanges,
           });
-        });
+        }
       }
       const fiberData: RenderData = {
         count: existingCount + 1,
@@ -551,7 +547,7 @@ export const initReactScanInstrumentation = () => {
       if (!isOverlayPaused) {
         outlineFiber(fiber);
       }
-      
+
       if (ReactScanInternals.options.value.log) {
         // this can be expensive given enough re-renders
         log(renders);

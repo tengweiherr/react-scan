@@ -70,23 +70,7 @@ export const updateOutlines = (
   outlines: OutlineData[],
 ) => {
   for (const { id, name, count, x, y, width, height, didCommit } of outlines) {
-    const outline: ActiveOutline = {
-      id,
-      name,
-      count,
-      x,
-      y,
-      width,
-      height,
-      frame: 0,
-      targetX: x,
-      targetY: y,
-      targetWidth: width,
-      targetHeight: height,
-      didCommit,
-    };
-    const key = String(outline.id);
-
+    const key = String(id);
     const existingOutline = activeOutlines.get(key);
     if (existingOutline) {
       existingOutline.count++;
@@ -97,7 +81,21 @@ export const updateOutlines = (
       existingOutline.targetHeight = height;
       existingOutline.didCommit = didCommit;
     } else {
-      activeOutlines.set(key, outline);
+      activeOutlines.set(key, {
+        id,
+        name,
+        count,
+        x,
+        y,
+        width,
+        height,
+        frame: 0,
+        targetX: x,
+        targetY: y,
+        targetWidth: width,
+        targetHeight: height,
+        didCommit,
+      });
     }
   }
 };
@@ -200,8 +198,7 @@ export const drawCanvas = (
     rectMap.set(rectKey, rect);
   }
 
-  for (const rect of rectMap.values()) {
-    const { x, y, width, height, alpha } = rect;
+  for (const { x, y, width, height, alpha } of rectMap.values()) {
     ctx.strokeStyle = `rgba(${primaryColor},${alpha})`;
     ctx.lineWidth = 1;
 
@@ -285,16 +282,16 @@ export const drawCanvas = (
         y + height > otherY &&
         otherY + otherHeight > y
       ) {
-        label.text = getLabelText([...label.outlines, ...otherLabel.outlines]);
+        label.text = getLabelText(
+          ([] as ActiveOutline[]).concat(label.outlines, otherLabel.outlines),
+        );
         label.width = ctx.measureText(label.text).width;
         labelMap.delete(otherKey);
       }
     }
   }
 
-  for (const label of labelMap.values()) {
-    const { x, y, alpha, width, height, text } = label;
-
+  for (const { x, y, alpha, width, height, text } of labelMap.values()) {
     let labelY: number = y - height - 4;
 
     if (labelY < 0) {
