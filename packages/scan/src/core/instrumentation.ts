@@ -5,6 +5,7 @@ import {
   type FiberRoot,
   ForwardRefTag,
   FunctionComponentTag,
+  INSTALL_ERROR,
   MemoComponentTag,
   MemoizedState,
   SimpleMemoComponentTag,
@@ -16,11 +17,14 @@ import {
   getType,
   hasMemoCache,
   instrument,
+  secure,
   traverseContexts,
   traverseProps,
+  traverseRenderedFibers,
   traverseState,
 } from 'bippy';
 import { isValidElement } from 'preact';
+import { outlineFiber } from 'src/new-outlines';
 import { isEqual } from '~core/utils';
 import { getChangedPropsDetailed } from '~web/components/inspector/utils';
 import {
@@ -37,7 +41,6 @@ import {
   Store,
   getIsProduction,
 } from './index';
-import { outlineFiber } from 'src/new-outlines';
 
 let fps = 0;
 let lastTime = performance.now();
@@ -433,88 +436,112 @@ export const createInstrumentation = (
   });
   if (!inited) {
     inited = true;
-    const visitor = createFiberVisitor({
-      onRender(fiber, phase) {
-        const type = getType(fiber.type);
-        if (!type) return null;
+    let isActive = false;
 
-        const allInstances = getAllInstances();
-        const validInstancesIndicies: Array<number> = [];
-        for (let i = 0, len = allInstances.length; i < len; i++) {
-          const instance = allInstances[i];
-          if (!instance.config.isValidFiber(fiber)) continue;
-          validInstancesIndicies.push(i);
-        }
-        if (!validInstancesIndicies.length) return null;
+    instrument(
+      secure(
+        {
+          name: 'react-scan',
+          onActive: () => {
+            isActive = true;
+            config.onActive?.();
+          },
+          onCommitFiberRoot(_, root) {
+            instrumentation.fiberRoots.add(root);
+            if (
+              ReactScanInternals.instrumentation?.isPaused.value &&
+              (Store.inspectState.value.kind === 'inspect-off' ||
+                Store.inspectState.value.kind === 'uninitialized') &&
+              !config.forceAlwaysTrackRenders
+            ) {
+              return;
+            }
+            const allInstances = getAllInstances();
+            for (const instance of allInstances) {
+              instance.config.onCommitStart();
+            }
+            traverseRenderedFibers(root, (fiber) => {
+              const type = getType(fiber.type);
+              if (!type) return null;
 
-        const changes: Array<Change> = [];
+              const allInstances = getAllInstances();
+              const validInstancesIndicies: Array<number> = [];
+              for (let i = 0, len = allInstances.length; i < len; i++) {
+                const instance = allInstances[i];
+                if (!instance.config.isValidFiber(fiber)) continue;
+                validInstancesIndicies.push(i);
+              }
+              if (!validInstancesIndicies.length) return null;
 
-        if (allInstances.some((instance) => instance.config.trackChanges)) {
-          const propsChanges = getChangedPropsDetailed(fiber);
+              const changes: Array<Change> = [];
 
-          const stateChanges = getStateChanges(fiber);
+              if (
+                allInstances.some((instance) => instance.config.trackChanges)
+              ) {
+                const propsChanges = getChangedPropsDetailed(fiber);
 
-          const contextChanges = null!;
+                const stateChanges = getStateChanges(fiber);
 
-          changes.push.apply(changes, propsChanges);
-          changes.push.apply(changes, stateChanges);
-          changes.push.apply(changes, contextChanges);
-        }
-        const { selfTime } = getTimings(fiber);
+                const contextChanges = null!;
 
-        const fps = getFPS();
-        const render: Render = {
-          phase: RENDER_PHASE_STRING_TO_ENUM[phase],
-          componentName: getDisplayName(type),
-          count: 1,
-          changes,
-          time: selfTime,
-          forget: hasMemoCache(fiber),
-          // todo: allow this to be toggle-able through toolbar
-          // todo: performance optimization: if the last fiber measure was very off screen, do not run isRenderUnnecessary
-          unnecessary: TRACK_UNNECESSARY_RENDERS
-            ? isRenderUnnecessary(fiber)
-            : null,
+                changes.push.apply(changes, propsChanges);
+                changes.push.apply(changes, stateChanges);
+                changes.push.apply(changes, contextChanges);
+              }
+              const { selfTime } = getTimings(fiber);
 
-          didCommit: didFiberCommit(fiber),
-          fps,
-        };
-        for (let i = 0, len = validInstancesIndicies.length; i < len; i++) {
-          const index = validInstancesIndicies[i];
-          const instance = allInstances[index];
-          instance.config.onRender(fiber, [render]);
-        }
-      },
-      onError(error) {
-        const allInstances = getAllInstances();
-        for (const instance of allInstances) {
-          instance.config.onError(error);
-        }
-      },
-    });
-    instrument({
-      name: 'react-scan',
-      onActive: config.onActive,
-      onCommitFiberRoot(rendererID, root) {
-        instrumentation.fiberRoots.add(root);
-        if (
-          ReactScanInternals.instrumentation?.isPaused.value &&
-          (Store.inspectState.value.kind === 'inspect-off' ||
-            Store.inspectState.value.kind === 'uninitialized') &&
-          !config.forceAlwaysTrackRenders
-        ) {
-          return;
-        }
-        const allInstances = getAllInstances();
-        for (const instance of allInstances) {
-          instance.config.onCommitStart();
-        }
-        visitor(rendererID, root);
-        for (const instance of allInstances) {
-          instance.config.onCommitFinish();
-        }
-      },
-    });
+              const fps = getFPS();
+              const render: Render = {
+                phase: RENDER_PHASE_STRING_TO_ENUM.update,
+                componentName: getDisplayName(type),
+                count: 1,
+                changes,
+                time: selfTime,
+                forget: hasMemoCache(fiber),
+                // todo: allow this to be toggle-able through toolbar
+                // todo: performance optimization: if the last fiber measure was very off screen, do not run isRenderUnnecessary
+                unnecessary: TRACK_UNNECESSARY_RENDERS
+                  ? isRenderUnnecessary(fiber)
+                  : null,
+
+                didCommit: didFiberCommit(fiber),
+                fps,
+              };
+              for (
+                let i = 0, len = validInstancesIndicies.length;
+                i < len;
+                i++
+              ) {
+                const index = validInstancesIndicies[i];
+                const instance = allInstances[index];
+                instance.config.onRender(fiber, [render]);
+              }
+            });
+            for (const instance of allInstances) {
+              instance.config.onCommitFinish();
+            }
+          },
+        },
+        {
+          dangerouslyRunInProduction: true,
+          onError(error) {
+            if (INSTALL_ERROR) {
+              console.warn('Failed to install instrumentation', error);
+            }
+            const allInstances = getAllInstances();
+            for (const instance of allInstances) {
+              instance.config.onError(error);
+            }
+          },
+        },
+      ),
+    );
+    setTimeout(() => {
+      if (!isActive) {
+        console.warn('Failed to install instrumentation');
+        instrumentation.isPaused.value = true;
+      }
+    }, 1000);
   }
   return instrumentation;
 };

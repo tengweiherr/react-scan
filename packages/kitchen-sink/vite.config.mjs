@@ -5,9 +5,10 @@ import Inspect from 'vite-plugin-inspect';
 
 export default defineConfig({
   plugins: [
-    react({}),
+    // react({}),
     Inspect(),
   ],
+
   resolve:
     process.env.NODE_ENV === 'production' && !process.env.TEST
       ? {}
