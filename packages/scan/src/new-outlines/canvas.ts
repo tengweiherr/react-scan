@@ -1,22 +1,22 @@
 import type { ActiveOutline, OutlineData } from './types';
 
 export const OUTLINE_ARRAY_SIZE = 7;
-export const MONO_FONT =
+const MONO_FONT =
   'Menlo,Consolas,Monaco,Liberation Mono,Lucida Console,monospace';
 
-export const INTERPOLATION_SPEED = 0.1;
-export const lerp = (start: number, end: number) => {
+const INTERPOLATION_SPEED = 0.1;
+const lerp = (start: number, end: number) => {
   return Math.floor(start + (end - start) * INTERPOLATION_SPEED);
 };
 
-export const MAX_PARTS_LENGTH = 4;
-export const MAX_LABEL_LENGTH = 40;
-export const TOTAL_FRAMES = 45;
+const MAX_PARTS_LENGTH = 4;
+const MAX_LABEL_LENGTH = 40;
+const TOTAL_FRAMES = 45;
 
-export const primaryColor = '115,97,230';
-export const secondaryColor = '128,128,128';
+const primaryColor = '115,97,230';
+// const secondaryColor = '128,128,128';
 
-export const getLabelText = (outlines: ActiveOutline[]): string => {
+const getLabelText = (outlines: ActiveOutline[]): string => {
   const nameByCount = new Map<string, number>();
   for (const outline of outlines) {
     const { name, count } = outline;
@@ -57,7 +57,7 @@ export const getLabelText = (outlines: ActiveOutline[]): string => {
   return labelText;
 };
 
-export const getAreaFromOutlines = (outlines: ActiveOutline[]) => {
+const getAreaFromOutlines = (outlines: ActiveOutline[]) => {
   let area = 0;
   for (const outline of outlines) {
     area += outline.width * outline.height;

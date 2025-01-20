@@ -153,7 +153,7 @@ export const getBatchedRectMap = async function* (
 const SupportedArrayBuffer =
   typeof SharedArrayBuffer !== 'undefined' ? SharedArrayBuffer : ArrayBuffer;
 
-export const flushOutlines = async () => {
+const flushOutlines = async () => {
   const elements: Element[] = [];
 
   for (const fiber of blueprintMapKeys) {
@@ -283,7 +283,7 @@ const getDpr = () => {
   return Math.min(window.devicePixelRatio || 1, 2);
 };
 
-export const getCanvasEl = () => {
+const getCanvasEl = () => {
   cleanup();
   const host = document.createElement('div');
   host.setAttribute('data-react-scan', 'true');
@@ -405,16 +405,16 @@ export const getCanvasEl = () => {
   return host;
 };
 
-export const hasStopped = () => {
+const hasStopped = () => {
   return globalThis.__REACT_SCAN_STOP__;
 };
 
-export const stop = () => {
-  globalThis.__REACT_SCAN_STOP__ = true;
-  cleanup();
-};
+// const stop = () => {
+//   globalThis.__REACT_SCAN_STOP__ = true;
+//   cleanup();
+// };
 
-export const cleanup = () => {
+const cleanup = () => {
   const host = document.querySelector('[data-react-scan]');
   if (host) {
     host.remove();
@@ -423,7 +423,7 @@ export const cleanup = () => {
 
 let needsReport = false;
 let reportInterval: ReturnType<typeof setInterval>;
-export const startReportInterval = () => {
+const startReportInterval = () => {
   clearInterval(reportInterval);
   reportInterval = setInterval(() => {
     if (needsReport) {
@@ -502,7 +502,7 @@ const reportRenderToListeners = (fiber: Fiber) => {
     }
   }
 };
-export const isValidFiber = (fiber: Fiber) => {
+const isValidFiber = (fiber: Fiber) => {
   if (ignoredProps.has(fiber.memoizedProps)) {
     return false;
   }

@@ -55,5 +55,3 @@ export const FpsMeter = () => {
     </span>
   );
 };
-
-export default FpsMeter;
