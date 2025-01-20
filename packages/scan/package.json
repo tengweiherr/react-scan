@@ -212,7 +212,7 @@
     "prettier": "prettier --config .prettierrc.mjs -w src",
     "publint": "publint",
     "test": "vitest",
-    "prune": "knip"
+    "ts-prune": "knip"
   },
   "dependencies": {
     "@babel/core": "^7.26.0",
