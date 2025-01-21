@@ -6,7 +6,14 @@ import {
   isCompositeFiber,
 } from 'bippy';
 import { useEffect } from 'react';
-import { CLSMetric, FCPMetric, onCLS, onFCP } from 'web-vitals';
+import {
+  CLSMetric,
+  FCPMetric,
+  LCPMetric,
+  onCLS,
+  onFCP,
+  onLCP,
+} from 'web-vitals';
 import {
   type MonitoringOptions,
   ReactScanInternals,
@@ -23,7 +30,7 @@ import { getSession } from './utils';
 // max retries before the set of components do not get reported (avoid memory leaks of the set of fibers stored on the component aggregation)
 const MAX_RETRIES_BEFORE_COMPONENT_GC = 7;
 
-export const webVitals = new Set<(CLSMetric | FCPMetric) & WebVitals>();
+export const webVitals = new Set<(CLSMetric | LCPMetric) & WebVitals>();
 
 interface WebVitals {
   url: string;
@@ -43,7 +50,7 @@ export const initWebVitalsMonitoring = () => {
   onCLS((metric) => webVitals.add({ ...metric, ...grabMetadata() }), {
     reportAllChanges: true,
   });
-  onFCP((metric) => webVitals.add({ ...metric, ...grabMetadata() }), {
+  onLCP((metric) => webVitals.add({ ...metric, ...grabMetadata() }), {
     reportAllChanges: true,
   });
 
