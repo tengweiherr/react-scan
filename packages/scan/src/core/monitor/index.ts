@@ -35,8 +35,9 @@ export const webVitals = new Set<(CLSMetric | LCPMetric) & WebVitals>();
 interface WebVitals {
   url: string;
   route: string;
-  commit?: string | null;
-  branch?: string | null;
+  commit: string | null;
+  branch: string | null;
+  timestamp: number;
 }
 
 export const initWebVitalsMonitoring = () => {
@@ -45,6 +46,7 @@ export const initWebVitalsMonitoring = () => {
     route: Store.monitor.value?.route ?? new URL(window.location.href).pathname,
     commit: Store.monitor.value?.commit ?? null,
     branch: Store.monitor.value?.branch ?? null,
+    timestamp: Date.now(),
   });
 
   onCLS((metric) => webVitals.add({ ...metric, ...grabMetadata() }), {

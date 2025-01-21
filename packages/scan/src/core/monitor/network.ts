@@ -95,6 +95,22 @@ export const flush = async (): Promise<void> => {
     }
   }
 
+  for (const vital of webVitals) {
+    aggregatedInteractions.push({
+      id: -1 * Math.floor(Math.random() * 10000),
+      path: [],
+      type: vital.name,
+      name: vital.name + ' on ' + vital.route,
+      time: vital.value,
+      timestamp: vital.timestamp,
+      url: vital.url,
+      route: vital.route,
+      commit: vital.commit,
+      branch: vital.branch,
+      uniqueInteractionId: '',
+    });
+  }
+
   const payload: IngestRequest = {
     interactions: aggregatedInteractions,
     components: aggregatedComponents,
