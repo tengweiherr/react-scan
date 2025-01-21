@@ -111,6 +111,8 @@ export const flush = async (): Promise<void> => {
     });
   }
 
+  webVitals.clear();
+
   const payload: IngestRequest = {
     interactions: aggregatedInteractions,
     components: aggregatedComponents,
