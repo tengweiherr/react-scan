@@ -6,6 +6,7 @@ import {
   isCompositeFiber,
 } from 'bippy';
 import { useEffect } from 'react';
+import { CLSMetric, FCPMetric, onCLS, onFCP } from 'web-vitals';
 import {
   type MonitoringOptions,
   ReactScanInternals,
@@ -21,6 +22,35 @@ import { getSession } from './utils';
 
 // max retries before the set of components do not get reported (avoid memory leaks of the set of fibers stored on the component aggregation)
 const MAX_RETRIES_BEFORE_COMPONENT_GC = 7;
+
+export const webVitals = new Set<(CLSMetric | FCPMetric) & WebVitals>();
+
+interface WebVitals {
+  url: string;
+  route: string;
+  commit?: string | null;
+  branch?: string | null;
+}
+
+export const initWebVitalsMonitoring = () => {
+  const grabMetadata = () => ({
+    url: window.location.toString(),
+    route: Store.monitor.value?.route ?? new URL(window.location.href).pathname,
+    commit: Store.monitor.value?.commit ?? null,
+    branch: Store.monitor.value?.branch ?? null,
+  });
+
+  onCLS((metric) => webVitals.add({ ...metric, ...grabMetadata() }), {
+    reportAllChanges: true,
+  });
+  onFCP((metric) => webVitals.add({ ...metric, ...grabMetadata() }), {
+    reportAllChanges: true,
+  });
+
+  setInterval(() => {
+    console.log(webVitals);
+  }, 1000);
+};
 
 export interface MonitoringProps {
   url?: string;
@@ -140,6 +170,7 @@ export const startMonitoring = () => {
   });
 
   ReactScanInternals.instrumentation = instrumentation;
+  initWebVitalsMonitoring();
 };
 
 const aggregateComponentRenderToInteraction = (

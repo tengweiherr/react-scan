@@ -1,3 +1,4 @@
+import { webVitals } from '.';
 import { Store } from '..';
 import { GZIP_MAX_LEN, GZIP_MIN_LEN, MAX_PENDING_REQUESTS } from './constants';
 import type {
@@ -59,26 +60,7 @@ export const flush = async (): Promise<void> => {
   const aggregatedInteractions = new Array<Interaction>();
   for (let i = 0; i < completedInteractions.length; i++) {
     const interaction = completedInteractions[i];
-
-    // META INFORMATION IS FOR DEBUGGING THIS MUST BE REMOVED SOON
-    const {
-      duration,
-      entries,
-      id,
-      inputDelay,
-      latency,
-      presentationDelay,
-      processingDuration,
-      processingEnd,
-      processingStart,
-      referrer,
-      startTime,
-      timeOrigin,
-      timeSinceTabInactive,
-      timestamp,
-      type,
-      visibilityState,
-    } = interaction.performanceEntry;
+    const { duration, timestamp, type } = interaction.performanceEntry;
     aggregatedInteractions.push({
       id: i,
       path: interaction.componentPath,
@@ -86,49 +68,11 @@ export const flush = async (): Promise<void> => {
       time: truncate(duration),
       timestamp,
       type,
-      // fixme: we can aggregate around url|route|commit|branch better to compress payload
       url: interaction.url,
       route: interaction.route,
       commit: interaction.commit,
       branch: interaction.branch,
       uniqueInteractionId: interaction.uniqueInteractionId,
-      meta: {
-        performanceEntry: {
-          id,
-          inputDelay: truncate(inputDelay),
-          latency: truncate(latency),
-          presentationDelay: truncate(presentationDelay),
-          processingDuration: truncate(processingDuration),
-          processingEnd,
-          processingStart,
-          referrer,
-          startTime,
-          timeOrigin,
-          timeSinceTabInactive,
-          visibilityState,
-          duration: truncate(duration),
-          entries: entries.map((entry) => {
-            const {
-              duration,
-              entryType,
-              interactionId,
-              name,
-              processingEnd,
-              processingStart,
-              startTime,
-            } = entry;
-            return {
-              duration: truncate(duration),
-              entryType,
-              interactionId,
-              name,
-              processingEnd,
-              processingStart,
-              startTime,
-            };
-          }),
-        },
-      },
     });
 
     const components = Array.from(interaction.components.entries());

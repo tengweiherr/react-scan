@@ -207,6 +207,9 @@ importers:
       tsx:
         specifier: ^4.0.0
         version: 4.0.0
+      web-vitals:
+        specifier: ^4.2.4
+        version: 4.2.4
     optionalDependencies:
       unplugin:
         specifier: 2.1.0
@@ -5055,6 +5058,9 @@ packages:
   web-ext-run@0.2.2:
     resolution: {integrity: sha512-GD59q5/1wYQJXTHrljMZaBa3cCz+Jj3FMDLYgKyAa34TPcHSuMaGqp7TcLJ66PCe43C3hmbEAZd8QCpAB34eiw==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
+
+  web-vitals@4.2.4:
+    resolution: {integrity: sha512-r4DIlprAGwJ7YM11VZp4R884m0Vmgr6EAKe3P+kO0PPj3Unqyvv59rczf6UiGcb9Z8QxZVcqKNwv/g0WNdWwsw==}
 
   webextension-polyfill@0.10.0:
     resolution: {integrity: sha512-c5s35LgVa5tFaHhrZDnr3FpQpjj1BB+RXhLTYUxGqBVN460HkbM8TBtEqdXWbpTKfzwCcjAZVF7zXCYSKtcp9g==}
@@ -10352,6 +10358,8 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  web-vitals@4.2.4: {}
 
   webextension-polyfill@0.10.0: {}
 
