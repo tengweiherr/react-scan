@@ -632,7 +632,7 @@ function mergeTwoLabels(
   };
 }
 
-function getBoundingRect(r1: DOMRect, r2: DOMRect): DOMRect {
+export function getBoundingRect(r1: DOMRect, r2: DOMRect): DOMRect {
   const x1 = Math.min(r1.x, r2.x);
   const y1 = Math.min(r1.y, r2.y);
   const x2 = Math.max(r1.x + r1.width, r2.x + r2.width);
@@ -640,9 +640,9 @@ function getBoundingRect(r1: DOMRect, r2: DOMRect): DOMRect {
   return new DOMRect(x1, y1, x2 - x1, y2 - y1);
 }
 
-function pickColorClosestToStartStage(
-  a: MergedOutlineLabel,
-  b: MergedOutlineLabel,
+export function pickColorClosestToStartStage(
+  a: {color: MergedOutlineLabel['color']},
+  b: {color: MergedOutlineLabel['color']},
 ) {
   // stupid hack to always take the gray value when the render is unnecessary (we know the gray value has equal rgb)
   if (a.color.r === a.color.g && a.color.g === a.color.b) {
@@ -655,7 +655,7 @@ function pickColorClosestToStartStage(
   return { color: a.color.r <= b.color.r ? a.color : b.color };
 }
 
-function getOverlapArea(rect1: DOMRect, rect2: DOMRect): number {
+export function getOverlapArea(rect1: DOMRect, rect2: DOMRect): number {
   if (rect1.right <= rect2.left || rect2.right <= rect1.left) {
     return 0;
   }
@@ -672,7 +672,7 @@ function getOverlapArea(rect1: DOMRect, rect2: DOMRect): number {
   return xOverlap * yOverlap;
 }
 
-function applyLabelTransform(
+export function applyLabelTransform(
   rect: DOMRect,
   estimatedTextWidth: number,
 ): DOMRect {

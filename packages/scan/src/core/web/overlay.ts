@@ -1,8 +1,20 @@
 import { recalcOutlines } from '@web-utils/outline';
 import { outlineWorker } from '@web-utils/outline-worker';
 
-export const initReactScanOverlay = () => {
-  const container = document.getElementById('react-scan-root');
+export const initReactScanOverlay = (
+  root?: HTMLElement,
+  customStyle?: {
+    position?: string;
+    top?: string;
+    left?: string;
+    width?: string;
+    height?: string;
+    pointerEvents?: string;
+    zIndex?: string;
+
+  },
+) => {
+  const container = root ?? document.getElementById('react-scan-root');
   const shadow = container?.shadowRoot;
 
   if (!shadow) {
@@ -12,13 +24,14 @@ export const initReactScanOverlay = () => {
   const overlayElement = document.createElement('canvas');
   overlayElement.id = 'react-scan-overlay';
 
-  overlayElement.style.position = 'fixed';
-  overlayElement.style.top = '0';
-  overlayElement.style.left = '0';
-  overlayElement.style.width = '100vw';
-  overlayElement.style.height = '100vh';
-  overlayElement.style.pointerEvents = 'none';
-  overlayElement.style.zIndex = '2147483646';
+  overlayElement.style.position = customStyle?.position ?? 'fixed';
+  overlayElement.style.top = customStyle?.top ?? '0';
+  overlayElement.style.left = customStyle?.left ?? '0';
+  overlayElement.style.width = customStyle?.width ?? '100vw';
+  overlayElement.style.height = customStyle?.height ?? '100vh';
+  overlayElement.style.pointerEvents = customStyle?.pointerEvents ?? 'none';
+  overlayElement.style.zIndex = customStyle?.zIndex ?? '2147483646';
+
   overlayElement.setAttribute('aria-hidden', 'true');
 
   shadow.appendChild(overlayElement);

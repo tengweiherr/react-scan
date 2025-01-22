@@ -1,7 +1,7 @@
 import 'bippy'; // implicit init RDT hook
 import { Store } from 'src';
 import { scanMonitoring } from 'src/core/monitor';
-import { initPerformanceMonitoring } from 'src/core/monitor/performance';
+// import { initPerformanceMonitoring } from 'src/core/monitor/performance';
 import { Device } from 'src/core/monitor/types';
 
 if (typeof window !== 'undefined') {
@@ -28,9 +28,10 @@ if (typeof window !== 'undefined') {
     route: '<mock-route>',
     commit: '<mock-commit>',
     branch: '<mock-branch>',
+    interactionListeningForRenders: null,
   };
-  scanMonitoring({
-    enabled: true,
-  });
-  initPerformanceMonitoring();
+  // scanMonitoring({
+  //   enabled: true,
+  // });
+  // initPerformanceMonitoring();
 }

@@ -23,15 +23,42 @@ let lastTime = performance.now();
 let frameCount = 0;
 let initedFps = false;
 
-const updateFPS = () => {
+let fpsListeners: Array<(fps: number) => void> = [];
+
+export const listenToFps = (listener: (fps: number) => void) => {
+  // console.log('oushed', listener);
+
+  fpsListeners.push(listener);
+
+  return () => {
+    // console.log('unsub listener');
+
+    fpsListeners = fpsListeners.filter(
+      (currListener) => currListener !== listener,
+    );
+  };
+};
+
+const updateFPS = (onChange?: (fps: number) => void) => {
   frameCount++;
   const now = performance.now();
-  if (now - lastTime >= 1000) {
-    fps = frameCount;
+  const timeSinceLastUpdate = now - lastTime;
+
+  if (timeSinceLastUpdate >= 500) {
+    const calculatedFPS = Math.round((frameCount / timeSinceLastUpdate) * 1000);
+
+    if (calculatedFPS !== fps) {
+      for (const listener of fpsListeners) {
+        listener(calculatedFPS);
+      }
+    }
+
+    fps = calculatedFPS;
     frameCount = 0;
     lastTime = now;
   }
-  requestAnimationFrame(updateFPS);
+
+  requestAnimationFrame(() => updateFPS(onChange));
 };
 
 export const getFPS = () => {
@@ -361,30 +388,30 @@ export const createInstrumentation = (
 
         const changes: Array<RenderChange> = [];
 
-        const propsChanges = getChangedPropsDetailed(fiber).map(change => ({
+        const propsChanges = getChangedPropsDetailed(fiber).map((change) => ({
           type: 'props' as const,
           name: change.name,
           value: change.value,
           prevValue: change.prevValue,
-          unstable: false
+          unstable: false,
         }));
 
-        const stateChanges = getStateChanges(fiber).map(change => ({
+        const stateChanges = getStateChanges(fiber).map((change) => ({
           type: 'state' as const,
           name: change.name,
           value: change.value,
           prevValue: change.prevValue,
           count: change.count,
-          unstable: false
+          unstable: false,
         }));
 
-        const contextChanges = getContextChanges(fiber).map(change => ({
+        const contextChanges = getContextChanges(fiber).map((change) => ({
           type: 'context' as const,
           name: change.name,
           value: change.value,
           prevValue: change.prevValue,
           count: change.count,
-          unstable: false
+          unstable: false,
         }));
 
         changes.push(...propsChanges, ...stateChanges, ...contextChanges);

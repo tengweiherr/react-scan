@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
 const schema = z.object({
   email: z.string().email(),
@@ -22,36 +22,40 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, name } = schema.parse(body);
     const options = {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.LOOPS_API_KEY}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         email,
-        firstName: name?.split(' ')[0],
-        lastName: name?.split(' ')[1],
-        source: 'monitoring waitlist',
+        firstName: name?.split(" ")[0],
+        lastName: name?.split(" ")[1],
+        source: "monitoring waitlist",
       }),
     };
 
     const response = await fetch(
-      'https://app.loops.so/api/v1/contacts/create',
-      options,
+      "https://app.loops.so/api/v1/contacts/create",
+      options
     );
     const data = await response.json();
 
     if (!data.success) {
+      console.log("error", data);
+
       return NextResponse.json({ error: data.message }, { status: 500 });
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.log("the error", error);
+
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return NextResponse.json(
-      { error: 'Failed to add to waitlist' },
-      { status: 500 },
+      { error: "Failed to add to waitlist" },
+      { status: 500 }
     );
   }
 }

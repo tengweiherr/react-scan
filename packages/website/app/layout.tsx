@@ -1,25 +1,25 @@
-import './globals.css';
-import localFont from 'next/font/local';
-import Script from 'next/script';
-import { Analytics } from '@vercel/analytics/next';
-import { SpeedInsights } from '@vercel/speed-insights/next';
-import Header from '../components/header';
-import Footer from '../components/footer';
+import "./globals.css";
+import localFont from "next/font/local";
+import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import Header from "../components/header";
+import Footer from "../components/footer";
 
 const geistSans = localFont({
-  src: './fonts/GeistVF.woff',
-  variable: '--font-geist-sans',
-  weight: '100 900',
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
 });
 const geistMono = localFont({
-  src: './fonts/GeistMonoVF.woff',
-  variable: '--font-geist-mono',
-  weight: '100 900',
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
 });
 
 export const metadata = {
-  title: 'React Scan',
-  description: 'scan ur app',
+  title: "React Scan",
+  description: "scan ur app",
 };
 
 export default function RootLayout({
@@ -77,7 +77,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}
       >
-        <div className="mx-auto max-w-[700px] px-8 pb-4 pt-20 sm:px-20 ">
+        <div className="mx-auto max-w-[700px] px-4 sm:px-8 pb-4 pt-12 sm:pt-20">
           <Header />
           {children}
         </div>

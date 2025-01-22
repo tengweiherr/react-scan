@@ -1,194 +1,183 @@
-import { Store } from '../..';
-import { GZIP_MIN_LEN, GZIP_MAX_LEN, MAX_PENDING_REQUESTS } from './constants';
-import { getSession } from './utils';
+import { Store } from "../..";
+import { GZIP_MIN_LEN, GZIP_MAX_LEN, MAX_PENDING_REQUESTS } from "./constants";
+import { getSession } from "./utils";
 import type {
   Interaction,
   IngestRequest,
   InternalInteraction,
   Component,
-} from './types';
+  Session,
+} from "./types";
+import { performanceEntryChannels } from "src/core/monitor/performance-store";
+import {
+  interactionStore,
+  MAX_INTERACTION_BATCH,
+} from "src/core/monitor/interaction-store";
+import { BoundedArray } from "src/core/monitor/performance-utils";
+import { CompletedInteraction } from "./performance";
+
+let afterFlushListeners: Array<() => void> = [];
+export const addAfterFlushListener = (
+  cb: () => void,
+  opts?: { once?: boolean }
+) => {
+  afterFlushListeners.push(() => {
+    cb();
+    if (opts?.once) {
+      afterFlushListeners = afterFlushListeners.filter(
+        (listener) => listener !== cb
+      );
+    }
+  });
+};
+
+export type InteractionWithArrayParents = {
+  detailedTiming: Omit<
+    CompletedInteraction["detailedTiming"],
+    "fiberRenders"
+  > & {
+    fiberRenders: {
+      [key: string]: {
+        renderCount: number;
+        parents: string[];
+        selfTime: number;
+      };
+    };
+  };
+  latency: number;
+  completedAt: number;
+  flushNeeded: boolean;
+};
+
+export const convertInteractionFiberRenderParents = (
+  interaction: CompletedInteraction
+): InteractionWithArrayParents => ({
+  ...interaction,
+  detailedTiming: {
+    ...interaction.detailedTiming,
+    fiberRenders: Object.fromEntries(
+      Object.entries(interaction.detailedTiming.fiberRenders).map(
+        ([key, value]) => [
+          key,
+          {
+            ...value,
+            parents: Array.from(value.parents),
+          },
+        ]
+      )
+    ),
+  },
+});
 
 const INTERACTION_TIME_TILL_COMPLETED = 4000;
 
-const truncate = (value: number, decimalPlaces = 4) =>
-  Number(value.toFixed(decimalPlaces));
+// TODO: truncate floats for clickhouse
+// const truncate = (value: number, decimalPlaces = 4) =>
+//   Number(value.toFixed(decimalPlaces));
+let pendingInteractionUUIDS: Array<string> = [];
 
 export const flush = async (): Promise<void> => {
   const monitor = Store.monitor.value;
   if (
     !monitor ||
-    !navigator.onLine ||
+    // // !navigator.onLine ||
     !monitor.url ||
-    !monitor.interactions.length
+    // // !monitor.interactions.length
+    !interactionStore.getCurrentState().length
   ) {
     return;
   }
-  const now = performance.now();
-  // We might trigger flush before the interaction is completed,
-  // so we need to split them into pending and completed by an arbitrary time.
-  const pendingInteractions = new Array<InternalInteraction>();
-  const completedInteractions = new Array<InternalInteraction>();
 
-  const interactions = monitor.interactions;
-  for (let i = 0; i < interactions.length; i++) {
-    const interaction = interactions[i];
-    const timeSinceStart = now - interaction.performanceEntry.startTime;
-    // these interactions were retried enough and should be discarded to avoid mem leak
-    if (timeSinceStart > 30000) {
-      continue;
-    } else if (timeSinceStart <= INTERACTION_TIME_TILL_COMPLETED) {
-      pendingInteractions.push(interaction);
-    } else {
-      completedInteractions.push(interaction);
-    }
-  }
-
-  // nothing to flush
-  if (!completedInteractions.length) return;
-
-  // idempotent
   const session = await getSession({
-    commit: monitor.commit,
-    branch: monitor.branch,
+    commit: "mock",
+    branch: "mock",
   }).catch(() => null);
 
-  if (!session) return;
-
-  const aggregatedComponents = new Array<Component>();
-  const aggregatedInteractions = new Array<Interaction>();
-  for (let i = 0; i < completedInteractions.length; i++) {
-    const interaction = completedInteractions[i];
-
-    // META INFORMATION IS FOR DEBUGGING THIS MUST BE REMOVED SOON
-    const {
-      duration,
-      entries,
-      id,
-      inputDelay,
-      latency,
-      presentationDelay,
-      processingDuration,
-      processingEnd,
-      processingStart,
-      referrer,
-      startTime,
-      timeOrigin,
-      timeSinceTabInactive,
-      timestamp,
-      type,
-      visibilityState,
-    } = interaction.performanceEntry;
-    aggregatedInteractions.push({
-      id: i,
-      path: interaction.componentPath,
-      name: interaction.componentName,
-      time: truncate(duration),
-      timestamp,
-      type,
-      // fixme: we can aggregate around url|route|commit|branch better to compress payload
-      url: interaction.url,
-      route: interaction.route,
-      commit: interaction.commit,
-      branch: interaction.branch,
-      uniqueInteractionId: interaction.uniqueInteractionId,
-      meta: {
-        performanceEntry: {
-          id,
-          inputDelay: truncate(inputDelay),
-          latency: truncate(latency),
-          presentationDelay: truncate(presentationDelay),
-          processingDuration: truncate(processingDuration),
-          processingEnd,
-          processingStart,
-          referrer,
-          startTime,
-          timeOrigin,
-          timeSinceTabInactive,
-          visibilityState,
-          duration: truncate(duration),
-          entries: entries.map((entry) => {
-            const {
-              duration,
-              entryType,
-              interactionId,
-              name,
-              processingEnd,
-              processingStart,
-              startTime,
-            } = entry;
-            return {
-              duration: truncate(duration),
-              entryType,
-              interactionId,
-              name,
-              processingEnd,
-              processingStart,
-              startTime,
-            };
-          }),
-        },
-      },
-    });
-
-    const components = Array.from(interaction.components.entries());
-    for (let j = 0; j < components.length; j++) {
-      const [name, component] = components[j];
-      aggregatedComponents.push({
-        name,
-        instances: component.fibers.size,
-        interactionId: i,
-        renders: component.renders,
-        selfTime:
-          typeof component.selfTime === 'number'
-            ? truncate(component.selfTime)
-            : component.selfTime,
-        totalTime:
-          typeof component.totalTime === 'number'
-            ? truncate(component.totalTime)
-            : component.totalTime,
-      });
-    }
+  if (!session) {
+    return;
   }
 
-  const payload: IngestRequest = {
-    interactions: aggregatedInteractions,
-    components: aggregatedComponents,
-    session: {
-      ...session,
-      url: window.location.toString(),
-      route: monitor.route, // this might be inaccurate but used to caculate which paths all the unique sessions are coming from without having to join on the interactions table (expensive)
-    },
+  const completedInteractions = interactionStore
+    .getCurrentState()
+    .filter(
+      (interaction) =>
+        !pendingInteractionUUIDS.includes(
+          interaction.detailedTiming.interactionUUID
+        ) && interaction.flushNeeded
+    );
+  if (!completedInteractions.length) {
+    return;
+  }
+
+  const payload: {
+    interactions: InteractionWithArrayParents[];
+    session: Session;
+  } = {
+    interactions: completedInteractions.map(
+      convertInteractionFiberRenderParents
+    ),
+    session,
   };
 
   monitor.pendingRequests++;
-  monitor.interactions = pendingInteractions;
+
+  pendingInteractionUUIDS.push(
+    ...completedInteractions.map((interaction) => {
+      interaction.flushNeeded = false;
+      return interaction.detailedTiming.interactionUUID;
+    })
+  );
   try {
     transport(monitor.url, payload)
       .then(() => {
+        performanceEntryChannels.publish(
+          payload.interactions.map(
+            (interaction) => interaction.detailedTiming.interactionUUID
+          ),
+          "flushed-interactions"
+        );
         monitor.pendingRequests--;
-        // there may still be renders associated with these interaction, so don't flush just yet
+        afterFlushListeners.forEach((cb) => {
+          cb();
+        });
       })
-      .catch(async () => {
+      .catch(async (e) => {
         // we let the next interval handle retrying, instead of explicitly retrying
-        monitor.interactions = monitor.interactions.concat(
-          completedInteractions,
+        // monitor.interactions = monitor.interactions.concat(
+        //   completedInteractions,
+        // );
+        completedInteractions.forEach((interaction) => {
+          interaction.flushNeeded = true;
+        });
+        interactionStore.setState(
+          BoundedArray.fromArray(
+            interactionStore.getCurrentState().concat(completedInteractions),
+            MAX_INTERACTION_BATCH
+          )
+        );
+      })
+      .finally(() => {
+        pendingInteractionUUIDS = pendingInteractionUUIDS.filter(
+          (uuid) =>
+            !completedInteractions.some(
+              (interaction) =>
+                interaction.detailedTiming.interactionUUID === uuid
+            )
         );
       });
   } catch {
     /* */
   }
 
-  // Keep only recent interactions
-  monitor.interactions = pendingInteractions;
 };
 
-const CONTENT_TYPE = 'application/json';
-const supportsCompression = typeof CompressionStream === 'function';
+const CONTENT_TYPE = "application/json";
+const supportsCompression = typeof CompressionStream === "function";
 
 export const compress = async (payload: string): Promise<ArrayBuffer> => {
   const stream = new Blob([payload], { type: CONTENT_TYPE })
     .stream()
-    .pipeThrough(new CompressionStream('gzip'));
+    .pipeThrough(new CompressionStream("gzip"));
   return new Response(stream).arrayBuffer();
 };
 
@@ -199,29 +188,29 @@ export const compress = async (payload: string): Promise<ArrayBuffer> => {
  */
 export const transport = async (
   url: string,
-  payload: IngestRequest,
+  payload: IngestRequest
 ): Promise<{ ok: boolean }> => {
   const fail = { ok: false };
   const json = JSON.stringify(payload);
   // gzip may not be worth it for small payloads,
   // only use it if the payload is large enough
-  const shouldCompress = json.length > GZIP_MIN_LEN;
+  const shouldCompress = false; //TODO CHANGE THIS BACK ITS JUST TO MAKE DEBUGGING EASIER
   const body =
     shouldCompress && supportsCompression ? await compress(json) : json;
 
   if (!navigator.onLine) return fail;
   const headers: any = {
-    'Content-Type': CONTENT_TYPE,
-    'Content-Encoding': shouldCompress ? 'gzip' : undefined,
-    'x-api-key': Store.monitor.value?.apiKey,
+    "Content-Type": CONTENT_TYPE,
+    "Content-Encoding": shouldCompress ? "gzip" : undefined,
+    "x-api-key": Store.monitor.value?.apiKey,
   };
-  if (shouldCompress) url += '?z=1';
-  const size = typeof body === 'string' ? body.length : body.byteLength;
+  if (shouldCompress) url += "?z=1";
+  const size = typeof body === "string" ? body.length : body.byteLength;
 
   return fetch(url, {
     body,
-    method: 'POST',
-    referrerPolicy: 'origin',
+    method: "POST",
+    referrerPolicy: "origin",
     /**
      * Outgoing requests are usually cancelled when navigating to a different page, causing a "TypeError: Failed to
      * fetch" error and sending a "network_error" client-outcome - in Chrome, the request status shows "(cancelled)".
@@ -243,8 +232,9 @@ export const transport = async (
     keepalive:
       GZIP_MAX_LEN > size &&
       MAX_PENDING_REQUESTS > (Store.monitor.value?.pendingRequests ?? 0),
-    priority: 'low',
+    priority: "low",
     // mode: 'no-cors',
     headers,
+    mode: "no-cors", // this fixes cors, but will need to actually fix correctly later
   });
 };

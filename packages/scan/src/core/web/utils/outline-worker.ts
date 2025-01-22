@@ -38,7 +38,7 @@ export type OutlineWorkerAction =
       };
     };
 
-function setupOutlineWorker(): (action: OutlineWorkerAction) => Promise<void> {
+export function setupOutlineWorker(): (action: OutlineWorkerAction) => Promise<void> {
   const MONO_FONT =
     'Menlo,Consolas,Monaco,Liberation Mono,Lucida Console,monospace';
   let ctx: OffscreenCanvasRenderingContext2D | undefined;

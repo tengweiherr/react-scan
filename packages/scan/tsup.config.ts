@@ -85,7 +85,12 @@ void (async () => {
 
 export default defineConfig([
   {
-    entry: ['./src/auto.ts', './src/install-hook.ts', './src/auto-monitor.ts'],
+    entry: [
+      './src/auto.ts',
+      './src/install-hook.ts',
+      './src/auto-monitor.ts',
+      './src/index.ts',
+    ],
     outDir: DIST_PATH,
     banner: {
       js: banner,
@@ -94,11 +99,13 @@ export default defineConfig([
     clean: false,
     sourcemap: false,
     format: ['iife'],
-    target: 'esnext',
+    target: 'es2017',
     platform: 'browser',
     treeshake: true,
     dts: true,
-    minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
+    globalName: 'ReactScan',
+    // minify: process.env.NODE_ENV === 'production' ? 'terser' : false,
+    minify: false,
 
     env: {
       NODE_ENV: process.env.NODE_ENV ?? 'development',
@@ -143,6 +150,7 @@ export default defineConfig([
     treeshake: false,
     dts: true,
     watch: process.env.NODE_ENV === 'development',
+    noExternal: ['rrweb'],
     async onSuccess() {
       await Promise.all([
         addDirectivesToChunkFiles(DIST_PATH),

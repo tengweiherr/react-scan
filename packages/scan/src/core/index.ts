@@ -172,6 +172,9 @@ export type MonitoringOptions = Pick<
 interface Monitor {
   pendingRequests: number;
   interactions: Array<InternalInteraction>;
+  interactionListeningForRenders:
+    | ((fiber: Fiber, renders: Array<Render>) => void)
+    | null;
   session: ReturnType<typeof getSession>;
   url: string | null;
   route: string | null;
@@ -381,12 +384,14 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
 
   // Get data from both current and alternate fibers
   const currentData = Store.reportData.get(reportFiber);
-  const alternateData = fiber.alternate ? Store.reportData.get(fiber.alternate) : null;
+  const alternateData = fiber.alternate
+    ? Store.reportData.get(fiber.alternate)
+    : null;
 
   // More efficient null checks and Math.max
   const existingCount = Math.max(
     (currentData && currentData.count) || 0,
-    (alternateData && alternateData.count) || 0
+    (alternateData && alternateData.count) || 0,
   );
 
   // Create single shared object for both fibers
@@ -395,7 +400,7 @@ export const reportRender = (fiber: Fiber, renders: Array<Render>) => {
     time: selfTime || 0,
     renders,
     displayName,
-    type: getType(fiber.type) || null
+    type: getType(fiber.type) || null,
   };
 
   // Store in both fibers
@@ -461,7 +466,12 @@ const updateScheduledOutlines = (fiber: Fiber, renders: Array<Render>) => {
   for (let i = 0, len = renders.length; i < len; i++) {
     const render = renders[i];
     const domFiber = getNearestHostFiber(fiber);
-    if (!domFiber || !domFiber.stateNode || !(domFiber.stateNode instanceof Element)) continue;
+    if (
+      !domFiber ||
+      !domFiber.stateNode ||
+      !(domFiber.stateNode instanceof Element)
+    )
+      continue;
 
     if (ReactScanInternals.scheduledOutlines.has(fiber)) {
       const existingOutline = ReactScanInternals.scheduledOutlines.get(fiber)!;
@@ -512,6 +522,10 @@ export const getIsProduction = () => {
   return isProduction;
 };
 
+export const attachReplayCanvas = () => {
+  startFlushOutlineInterval();
+};
+
 export const start = () => {
   if (typeof window === 'undefined') return;
 
@@ -540,6 +554,13 @@ export const start = () => {
 
   const instrumentation = createInstrumentation('devtools', {
     onActive() {
+      const rdtHook = getRDTHook();
+      for (const renderer of rdtHook.renderers.values()) {
+        const buildType = detectReactBuildType(renderer);
+        if (buildType === 'production') {
+          isProduction = true;
+        }
+      }
       const existingRoot = document.querySelector('react-scan-root');
       if (existingRoot) {
         return;
@@ -556,7 +577,9 @@ export const start = () => {
         void audioContext.resume();
       };
 
-      window.addEventListener('pointerdown', createAudioContextOnInteraction, { once: true });
+      window.addEventListener('pointerdown', createAudioContextOnInteraction, {
+        once: true,
+      });
 
       const container = document.createElement('div');
       container.id = 'react-scan-root';

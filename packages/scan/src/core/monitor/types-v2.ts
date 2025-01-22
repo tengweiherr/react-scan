@@ -1,5 +1,4 @@
 import { type Fiber } from 'react-reconciler';
-import { CompletedInteraction } from 'src/core/monitor/performance';
 
 export enum Device {
   DESKTOP = 0,
@@ -96,70 +95,19 @@ export interface Component {
   selfTime?: number;
 }
 
-export type  IngestRequest = ReplaceSetWithArray<{
-  interactions: Array<CompletedInteraction>;
+export interface IngestRequest {
+  interactions: Array<Interaction>;
+  components: Array<Component>;
   session: Session;
-}>
-export type ReplaceSetWithArray<T> = T extends Set<infer U>
-  ? Array<U>
-  : T extends Array<infer U>
-  ? Array<ReplaceSetWithArray<U>> 
-  : T extends { [key: string]: any }
-  ? { [K in keyof T]: ReplaceSetWithArray<T[K]> }
-  : T extends object
-  ? { [K in keyof T]: ReplaceSetWithArray<T[K]> }
-  : T;
+}
 
 // used internally in runtime for interaction tracking. converted to Interaction when flushed
 export interface InternalInteraction {
-  componentRenderData: Record<
-    string,
-    {
-      renderCount: number;
-      parents: Array<string>;
-      selfTime?: number | null;
-      // totalTime: number;
-    }
-  >;
-  childrenTree: Record<
-    string,
-    { children: Array<string>; firstNamedAncestor: string; isRoot: boolean }
-  >
-
-  listeningForComponentRenders: boolean;
-
-  componentName: string;
-  url: string;
-  route: string | null;
-  commit: string | null;
-  branch: string | null;
-  uniqueInteractionId: string; // uniqueInteractionId is unique to the session and provided by performance observer.
-  componentPath: Array<string>;
-  performanceEntry: PerformanceInteraction;
-  components: Map<string, InternalComponentCollection>;
-  interactionUUID: string;
-  detailedTiming?: {
-    // // jsHandlersTime: number;
-    // clickHandlerEnd: number;
-    // pointerUpStart: number;
-    // commmitEnd: number;
-    // // prepaintLayerizeTimeStart: number;
-    // clickChangeStart: number;
-    // prePaintTime: number;
-    // paintTime: number;
-    // compositorTime: number;
-
-    clickHandlerMicroTaskEnd: number;
-    clickChangeStart: number | null;
-    pointerUpStart: number;
-    // interactionId: lastInteractionId,
-    commmitEnd: number;
-    rafStart: number;
-    timeorigin: number;
-  };
-
-  // interactionStartAt: number
-  // interactionEndAt: number
+  performanceEntry: PerformanceInteraction,
+  route:string,
+  url:string,
+  branch: string,
+  commit: string,
 }
 interface InternalComponentCollection {
   uniqueInteractionId: string;

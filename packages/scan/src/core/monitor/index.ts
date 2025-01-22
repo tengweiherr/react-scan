@@ -10,10 +10,9 @@ import {
 } from '..';
 import { createInstrumentation, type Render } from '../instrumentation';
 import { updateFiberRenderData } from '../utils';
-import { initPerformanceMonitoring } from './performance';
 import { getSession } from './utils';
 import { flush } from './network';
-import { computeRoute } from './params/utils';
+import { scanWithRecord } from 'src/core/monitor/session-replay/record';
 
 // max retries before the set of components do not get reported (avoid memory leaks of the set of fibers stored on the component aggregation)
 const MAX_RETRIES_BEFORE_COMPONENT_GC = 7;
@@ -50,30 +49,23 @@ export const Monitoring = ({
 }: MonitoringProps) => {
   if (!apiKey)
     throw new Error('Please provide a valid API key for React Scan monitoring');
-  url ??= 'https://monitoring.react-scan.com/api/v1/ingest';
-
+  // url ??= "https://monitoring.react-scan.com/api/v1/ingest";
   Store.monitor.value ??= {
     pendingRequests: 0,
+    url: 'http://localhost:4200/api/ingest',
+    apiKey,
     interactions: [],
     session: getSession({ commit, branch }).catch(() => null),
-    url,
-    apiKey,
     route,
-    commit,
-    branch,
+    branch: 'main',
+    commit: '0x00000',
+
+    interactionListeningForRenders: null,
   };
 
-  // When using Monitoring without framework, we need to compute the route from the path and params
-  if (!route && path && params) {
-    Store.monitor.value.route = computeRoute(path, params);
-  } else if (typeof window !== 'undefined') {
-    Store.monitor.value.route =
-      route ?? path ?? new URL(window.location.toString()).pathname; // this is inaccurate on vanilla react if the path is not provided but used for session route
-  }
-
   useEffect(() => {
+    scanWithRecord();
     scanMonitoring({ enabled: true });
-    return initPerformanceMonitoring();
   }, []);
 
   return null;
@@ -101,6 +93,7 @@ export const startMonitoring = () => {
 
   flushInterval = setInterval(() => {
     try {
+      
       void flush();
     } catch {
       /* */
@@ -126,6 +119,7 @@ export const startMonitoring = () => {
       if (isCompositeFiber(fiber)) {
         aggregateComponentRenderToInteraction(fiber, renders);
       }
+      publishToListeningInteraction(fiber, renders);
       ReactScanInternals.options.value.onRender?.(fiber, renders);
     },
     onCommitFinish() {
@@ -151,7 +145,7 @@ const aggregateComponentRenderToInteraction = (
   const displayName = getDisplayName(fiber.type);
   if (!displayName) return; // TODO(nisarg): it may be useful to somehow report the first ancestor with a display name instead of completely ignoring
 
-  let component = lastInteraction.components.get(displayName); // TODO(nisarg): Same names are grouped together which is wrong.
+  let component = lastInteraction.components.get(displayName); // TODO(rob): we can be more precise with fiber types, but display name is fine for now
 
   if (!component) {
     component = {
@@ -180,4 +174,16 @@ const aggregateComponentRenderToInteraction = (
     component.totalTime += totalTime;
     component.selfTime += selfTime;
   }
+};
+
+const publishToListeningInteraction = (
+  fiber: Fiber,
+  renders: Array<Render>,
+) => {
+  const monitor = Store.monitor.value;
+  if (!monitor || !monitor.interactionListeningForRenders) {
+    return;
+  }
+
+  monitor.interactionListeningForRenders(fiber, renders);
 };
