@@ -15,8 +15,7 @@
       "**/node_modules/**",
       "**/*.css",
       "**/*.astro",
-      "packages/website",
-      "kitchen-sink"
+      "packages/website"
     ]
   },
   "organizeImports": {
