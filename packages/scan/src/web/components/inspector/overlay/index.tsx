@@ -728,6 +728,7 @@ export const ScanOverlay = () => {
       />
       <canvas
         ref={refCanvas}
+        dir="ltr"
         className={cn(
           'react-scan-inspector-overlay',
           'fixed inset-0 w-screen h-screen',

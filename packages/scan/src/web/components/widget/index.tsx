@@ -253,6 +253,8 @@ export const Widget = () => {
   useEffect(() => {
     if (!refWidget.current) return;
 
+    refWidget.current.dir = 'ltr';
+    refWidget.current.style.placeSelf = 'self-start';
     refWidget.current.style.width = 'min-content';
     refInitialMinimizedHeight.current = 36; // height of the header
     refInitialMinimizedWidth.current = refWidget.current.offsetWidth;
