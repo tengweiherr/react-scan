@@ -6,7 +6,7 @@ import {
   useState,
 } from 'preact/hooks';
 import { Store } from '~core/index';
-import { renderDataMap } from '~core/instrumentation';
+import { getRenderDataMapKey, renderDataMap } from '~core/instrumentation';
 import { Icon } from '~web/components/icon';
 import {
   LOCALSTORAGE_KEY,
@@ -43,8 +43,10 @@ const flattenTree = (
       ? getFiberPath(node.fiber)
       : `${parentPath}-${index}`;
 
+    const key = getRenderDataMapKey(node?.fiber)
+
     const renderData = node.fiber?.type
-      ? renderDataMap.get(node.fiber.type)
+      ? renderDataMap.get(key)
       : undefined;
 
     const flatNode: FlattenedNode = {

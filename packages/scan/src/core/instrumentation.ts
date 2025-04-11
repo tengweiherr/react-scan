@@ -438,17 +438,25 @@ export interface OldRenderData {
 
 const RENDER_DEBOUNCE_MS = 16;
 
-export const renderDataMap = new WeakMap<object, RenderData>();
+export const renderDataMap = new Map<string, RenderData>();
+
+export function getRenderDataMapKey(fiber: Fiber) {
+  const typeName = String(fiber?.type);
+  return `${typeName}-${fiber?.key ?? ''}-${fiber?.index ?? ''}`;
+}
 
 const trackRender = (
-  type: unknown,
+  fiber: Fiber,
   fiberSelfTime: number,
   fiberTotalTime: number,
   hasChanges: boolean,
   hasDomMutations: boolean,
 ) => {
   const currentTimestamp = Date.now();
-  const existingData = renderDataMap.get(type as object);
+
+  const renderKey = getRenderDataMapKey(fiber)
+
+  const existingData = renderDataMap.get(renderKey);
 
   if (
     (hasChanges || hasDomMutations) &&
@@ -468,7 +476,7 @@ const trackRender = (
     renderData.totalTime = fiberTotalTime || 0;
     renderData.lastRenderTimestamp = currentTimestamp;
 
-    renderDataMap.set(type as object, { ...renderData });
+    renderDataMap.set(renderKey, { ...renderData });
   }
 };
 
@@ -598,7 +606,7 @@ export const createInstrumentation = (
 
             if (phase === 'update') {
               trackRender(
-                type,
+                fiber,
                 fiberSelfTime,
                 fiberTotalTime,
                 hasChanges,
