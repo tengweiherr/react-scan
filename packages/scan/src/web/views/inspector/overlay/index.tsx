@@ -172,6 +172,9 @@ export const ScanOverlay = () => {
     ctx.lineWidth = 1;
     ctx.fillRect(rect.left, rect.top, rect.width, rect.height);
     ctx.strokeRect(rect.left, rect.top, rect.width, rect.height);
+    // const scrollbarWidthIfExist = window.innerWidth - document.documentElement.clientWidth
+    // ctx.fillRect(rect.left + scrollbarWidthIfExist, rect.top, rect.width, rect.height);
+    // ctx.strokeRect(rect.left + scrollbarWidthIfExist, rect.top, rect.width, rect.height);
 
     drawStatsPill(ctx, rect, kind, fiber);
   };
