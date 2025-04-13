@@ -145,11 +145,13 @@ export const calculatePosition = (
   // Only ensure positions are within bounds if minimized
   if (isMinimized) {
     if (isRTL) {
+      // For RTL
       x = Math.min(
         -leftBound,
         Math.max(x, -rightBound)
       );
     } else {
+      // For LTR
       x = Math.max(
         leftBound,
         Math.min(x, rightBound),
