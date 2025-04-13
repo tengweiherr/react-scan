@@ -145,13 +145,11 @@ export const calculatePosition = (
   // Only ensure positions are within bounds if minimized
   if (isMinimized) {
     if (isRTL) {
-      // RTL bounds checking
       x = Math.min(
         -leftBound,
         Math.max(x, -rightBound)
       );
     } else {
-      // LTR bounds checking
       x = Math.max(
         leftBound,
         Math.min(x, rightBound),
@@ -233,20 +231,21 @@ export const calculateNewSizeAndPosition = (
   let newX = initialPosition.x;
   let newY = initialPosition.y;
 
+  // horizontal resize for RTL
   if (isRTL && position.includes('right')) {
-    // Check if we have enough space on the left
+    // Check if we have enough space on the right
     const availableWidth = -initialPosition.x + initialSize.width - SAFE_AREA;
     const proposedWidth = Math.min(initialSize.width + deltaX, availableWidth);
     newWidth = Math.min(maxWidth, Math.max(MIN_SIZE.width, proposedWidth));
     newX = initialPosition.x + (newWidth - initialSize.width);
   }
   if (isRTL && position.includes('left')) {
-    // Check if we have enough space on the right
+    // Check if we have enough space on the left
     const availableWidth = window.innerWidth - initialPosition.x - SAFE_AREA;
     const proposedWidth = Math.min(initialSize.width - deltaX, availableWidth);
     newWidth = Math.min(maxWidth, Math.max(MIN_SIZE.width, proposedWidth));
   }
-  // horizontal resize
+  // horizontal resize for LTR
   if (!isRTL && position.includes('right')) {
     // Check if we have enough space on the right
     const availableWidth = window.innerWidth - initialPosition.x - SAFE_AREA;
@@ -350,8 +349,6 @@ export const getBestCorner = (
   initialMouseY?: number,
   threshold = 100,
 ): Corner => {
-  const isRTL = getComputedStyle(document.body).direction === 'rtl';
-
   const deltaX = initialMouseX !== undefined ? mouseX - initialMouseX : 0;
   const deltaY = initialMouseY !== undefined ? mouseY - initialMouseY : 0;
 
