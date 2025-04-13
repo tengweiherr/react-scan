@@ -172,9 +172,6 @@ export const ScanOverlay = () => {
     ctx.lineWidth = 1;
     ctx.fillRect(rect.left, rect.top, rect.width, rect.height);
     ctx.strokeRect(rect.left, rect.top, rect.width, rect.height);
-    // const scrollbarWidthIfExist = window.innerWidth - document.documentElement.clientWidth
-    // ctx.fillRect(rect.left + scrollbarWidthIfExist, rect.top, rect.width, rect.height);
-    // ctx.strokeRect(rect.left + scrollbarWidthIfExist, rect.top, rect.width, rect.height);
 
     drawStatsPill(ctx, rect, kind, fiber);
   };
@@ -713,7 +710,7 @@ export const ScanOverlay = () => {
     <>
       <div
         ref={refEventCatcher}
-        className={cn('fixed inset-0 w-screen h-screen', 'z-[214748365]')}
+        className={cn('fixed top-0 left-0 w-screen h-screen', 'z-[214748365]')}
         // DO NOT DO NOT DO NOT REMOVE THE STYLE IT WILL CAUSE MASSIVE PERFORMANCE ISSUES https://x.com/RobKnight__/status/1897524145157439558
         style={{
           pointerEvents: 'none',
@@ -724,7 +721,7 @@ export const ScanOverlay = () => {
         dir="ltr"
         className={cn(
           'react-scan-inspector-overlay',
-          'fixed inset-0 w-screen h-screen',
+          'fixed top-0 left-0 w-screen h-screen',
           'pointer-events-none',
           'z-[214748367]',
         )}
