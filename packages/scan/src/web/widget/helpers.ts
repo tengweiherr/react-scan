@@ -292,14 +292,15 @@ export const calculateNewSizeAndPosition = (
   let topBound = SAFE_AREA
   let bottomBound = window.innerHeight - SAFE_AREA - newHeight
 
+  // Ensure position stays within bounds
   if (isRTL) {
-    // Ensure position stays within bounds for RTL
+    // for RTL
     newX = Math.min(
       -leftBound,
       Math.max(newX, -rightBound)
     );
   } else {
-    // Ensure position stays within bounds
+    // for LTR
     newX = Math.max(
       leftBound,
       Math.min(newX, rightBound),
