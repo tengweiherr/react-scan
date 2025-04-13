@@ -114,38 +114,52 @@ export const calculatePosition = (
   let x: number;
   let y: number;
 
+  let leftBound = SAFE_AREA
+  let rightBound =  windowWidth - effectiveWidth - SAFE_AREA
+  let topBound = SAFE_AREA
+  let bottomBound = windowHeight - effectiveHeight - SAFE_AREA
+
   switch (corner) {
     case 'top-right':
-      x = isRTL ? -SAFE_AREA : windowWidth - effectiveWidth - SAFE_AREA;
-      y = SAFE_AREA;
+      x = isRTL ? -leftBound : rightBound;
+      y = topBound;
       break;
     case 'bottom-right':
-      x = isRTL ? -SAFE_AREA : windowWidth - effectiveWidth - SAFE_AREA;
-      y = windowHeight - effectiveHeight - SAFE_AREA;
+      x = isRTL ? -leftBound : rightBound;
+      y = bottomBound;
       break;
     case 'bottom-left':
-      x = isRTL ? -(windowWidth - effectiveWidth - SAFE_AREA) : SAFE_AREA;
-      y = windowHeight - effectiveHeight - SAFE_AREA;
+      x = isRTL ? -rightBound : leftBound;
+      y = bottomBound;
       break;
     case 'top-left':
-      x = isRTL ? -(windowWidth - effectiveWidth - SAFE_AREA) : SAFE_AREA;
-      y = SAFE_AREA;
+      x = isRTL ? -rightBound : leftBound;
+      y = topBound;
       break;
     default:
-      x = SAFE_AREA;
-      y = SAFE_AREA;
+      x = leftBound;
+      y = topBound;
       break;
   }
 
   // Only ensure positions are within bounds if minimized
-  if (isMinimized && !isRTL) {
-    x = Math.max(
-      SAFE_AREA,
-      Math.min(x, windowWidth - effectiveWidth - SAFE_AREA),
-    );
+  if (isMinimized) {
+    if (isRTL) {
+      // RTL bounds checking
+      x = Math.min(
+        -leftBound,
+        Math.max(x, -rightBound)
+      );
+    } else {
+      // LTR bounds checking
+      x = Math.max(
+        leftBound,
+        Math.min(x, rightBound),
+      );
+    }
     y = Math.max(
-      SAFE_AREA,
-      Math.min(y, windowHeight - effectiveHeight - SAFE_AREA),
+      topBound,
+      Math.min(y, bottomBound),
     );
   }
 
@@ -224,7 +238,7 @@ export const calculateNewSizeAndPosition = (
     const availableWidth = -initialPosition.x + initialSize.width - SAFE_AREA;
     const proposedWidth = Math.min(initialSize.width + deltaX, availableWidth);
     newWidth = Math.min(maxWidth, Math.max(MIN_SIZE.width, proposedWidth));
-    newX = -(-initialPosition.x - (newWidth - initialSize.width));
+    newX = initialPosition.x + (newWidth - initialSize.width);
   }
   if (isRTL && position.includes('left')) {
     // Check if we have enough space on the right
@@ -274,17 +288,29 @@ export const calculateNewSizeAndPosition = (
     newY = initialPosition.y - (newHeight - initialSize.height);
   }
 
-  if (!isRTL) {
+  let leftBound = SAFE_AREA
+  let rightBound = window.innerWidth - SAFE_AREA - newWidth
+  let topBound = SAFE_AREA
+  let bottomBound = window.innerHeight - SAFE_AREA - newHeight
+
+  if (isRTL) {
+    // Ensure position stays within bounds for RTL
+    newX = Math.min(
+      -leftBound,
+      Math.max(newX, -rightBound)
+    );
+  } else {
     // Ensure position stays within bounds
     newX = Math.max(
-      SAFE_AREA,
-      Math.min(newX, window.innerWidth - SAFE_AREA - newWidth),
-    );
-    newY = Math.max(
-      SAFE_AREA,
-      Math.min(newY, window.innerHeight - SAFE_AREA - newHeight),
+      leftBound,
+      Math.min(newX, rightBound),
     );
   }
+
+  newY = Math.max(
+    topBound,
+    Math.min(newY, bottomBound),
+  );
 
   return {
     newSize: { width: newWidth, height: newHeight },
@@ -324,6 +350,8 @@ export const getBestCorner = (
   initialMouseY?: number,
   threshold = 100,
 ): Corner => {
+  const isRTL = getComputedStyle(document.body).direction === 'rtl';
+
   const deltaX = initialMouseX !== undefined ? mouseX - initialMouseX : 0;
   const deltaY = initialMouseY !== undefined ? mouseY - initialMouseY : 0;
 
