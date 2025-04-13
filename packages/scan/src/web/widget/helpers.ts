@@ -94,7 +94,7 @@ export const calculatePosition = (
   width: number,
   height: number,
 ): Position => {
-  const isRTL = getComputedStyle(document.body).direction === 'rtl'
+  const isRTL = getComputedStyle(document.body).direction === 'rtl';
 
   const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;
@@ -114,10 +114,10 @@ export const calculatePosition = (
   let x: number;
   let y: number;
 
-  let leftBound = SAFE_AREA
-  let rightBound =  windowWidth - effectiveWidth - SAFE_AREA
-  let topBound = SAFE_AREA
-  let bottomBound = windowHeight - effectiveHeight - SAFE_AREA
+  let leftBound = SAFE_AREA;
+  let rightBound =  windowWidth - effectiveWidth - SAFE_AREA;
+  let topBound = SAFE_AREA;
+  let bottomBound = windowHeight - effectiveHeight - SAFE_AREA;
 
   switch (corner) {
     case 'top-right':
@@ -289,10 +289,10 @@ export const calculateNewSizeAndPosition = (
     newY = initialPosition.y - (newHeight - initialSize.height);
   }
 
-  let leftBound = SAFE_AREA
-  let rightBound = window.innerWidth - SAFE_AREA - newWidth
-  let topBound = SAFE_AREA
-  let bottomBound = window.innerHeight - SAFE_AREA - newHeight
+  let leftBound = SAFE_AREA;
+  let rightBound = window.innerWidth - SAFE_AREA - newWidth;
+  let topBound = SAFE_AREA;
+  let bottomBound = window.innerHeight - SAFE_AREA - newHeight;
 
   // Ensure position stays within bounds
   if (isRTL) {
