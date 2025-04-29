@@ -476,7 +476,6 @@ const trackRender = (
   hasDomMutations: boolean,
 ) => {
   const currentTimestamp = Date.now();
-
   const type = getType(fiber.type)
   const existingData = getRenderData(type, fiber);
 
