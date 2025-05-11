@@ -10,6 +10,7 @@ import {
   SimpleMemoComponentTag,
   didFiberCommit,
   getDisplayName,
+  getFiberId,
   getMutatedHostFibers,
   getTimings,
   getType,
@@ -438,34 +439,16 @@ export interface OldRenderData {
 
 const RENDER_DEBOUNCE_MS = 16;
 
-export const renderDataMap = new WeakMap<object, Map<string, RenderData>>();
+export const renderDataMap = new Map<number, RenderData>();
 
-function getFiberIdentifier(fiber: Fiber) {
-  return `${fiber.key}::${fiber.index}`;
-}
-
-export function getRenderData(type: unknown, fiber: Fiber) {
-  const id = getFiberIdentifier(fiber);
-  const keyMap = renderDataMap.get(type as object);
-
-  if (keyMap) {
-    return keyMap.get(id);
-  }
-
-  return undefined;
+export function getRenderData(fiber: Fiber) {
+  const id = getFiberId(fiber);
+  return renderDataMap.get(id);
 }
 
 export function setRenderData(fiber: Fiber, value: RenderData) {
-  const type = getType(fiber.type)
-  const id = getFiberIdentifier(fiber);
-  let keyMap = renderDataMap.get(type as object);
-  
-  if (!keyMap) {
-    keyMap = new Map();
-    renderDataMap.set(type as object, keyMap);
-  }
-
-  keyMap.set(id, value);
+  const id = getFiberId(fiber);  
+  renderDataMap.set(id, value);
 }
 
 const trackRender = (
@@ -476,8 +459,7 @@ const trackRender = (
   hasDomMutations: boolean,
 ) => {
   const currentTimestamp = Date.now();
-  const type = getType(fiber.type)
-  const existingData = getRenderData(type, fiber);
+  const existingData = getRenderData(fiber);
 
   if (
     (hasChanges || hasDomMutations) &&
