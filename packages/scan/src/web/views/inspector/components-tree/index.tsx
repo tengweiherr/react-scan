@@ -44,7 +44,7 @@ const flattenTree = (
       : `${parentPath}-${index}`;
 
     const renderData = node.fiber?.type
-      ? getRenderData(node.fiber.type, node.fiber)
+      ? getRenderData(node.fiber)
       : undefined;
 
     const flatNode: FlattenedNode = {

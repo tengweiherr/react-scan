@@ -10,6 +10,7 @@ import {
   SimpleMemoComponentTag,
   didFiberCommit,
   getDisplayName,
+  getFiberId,
   getMutatedHostFibers,
   getTimings,
   getType,
@@ -441,12 +442,12 @@ const RENDER_DEBOUNCE_MS = 16;
 export const renderDataMap = new WeakMap<object, Map<string, RenderData>>();
 
 function getFiberIdentifier(fiber: Fiber) {
-  return `${fiber.key}::${fiber.index}`;
+  return String(getFiberId(fiber));
 }
 
-export function getRenderData(type: unknown, fiber: Fiber) {
+export function getRenderData(fiber: Fiber) {
   const id = getFiberIdentifier(fiber);
-  const keyMap = renderDataMap.get(type as object);
+  const keyMap = renderDataMap.get(getType(fiber) as object);
 
   if (keyMap) {
     return keyMap.get(id);
@@ -476,8 +477,7 @@ const trackRender = (
   hasDomMutations: boolean,
 ) => {
   const currentTimestamp = Date.now();
-  const type = getType(fiber.type)
-  const existingData = getRenderData(type, fiber);
+  const existingData = getRenderData(fiber);
 
   if (
     (hasChanges || hasDomMutations) &&
